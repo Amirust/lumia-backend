@@ -1,1 +1,1 @@
-# Lumia -- Anime Gallery
+# Lumia - Anime Gallery
