@@ -1,9 +1,115 @@
-import { boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core'
-import { getTableColumns, relations } from 'drizzle-orm'
+import { index, integer, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core'
 import { user } from '@app/better-auth/auth.schema'
 
 export * from '@app/better-auth/auth.schema'
 
 /* --- ENUMS --- */
 
+const sourceTypeEnum = pgEnum('source_type', [ 'fanart', 'screenshot' ])
+const uploadStatusEnum = pgEnum('upload_status', [ 'uploading', 'pending', 'indexing', 'done', 'failed' ])
+
 /* --- TABLES --- */
+
+export const imagesTable = pgTable('images', {
+  id: text('id').primaryKey(),
+  authorId: text('author_id').notNull().references(() => user.id),
+  contentHash: text('content_hash').notNull(),
+  
+  storageKey: text('storage_key'),
+
+  // png, jpeg, webp, etc
+  sourceFormat: text('source_format'),
+  width: integer('width'),
+  height: integer('height'),
+  // in bytes
+  fileSize: integer('file_size'),
+
+  sourceType: sourceTypeEnum('source_type').notNull(),
+  tags: text('tags').array().default([]).notNull(),
+
+  status: uploadStatusEnum('upload_status').notNull(),
+  errorMessage: text('error_message'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at')
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (t) => [
+  index('images_author_id_idx').on(t.authorId),
+  index('images_status_idx').on(t.status),
+  index('images_source_type_idx').on(t.sourceType),
+  index('images_tags_idx').using('gin', t.tags),
+  unique('images_content_hash_unique').on(t.contentHash),
+])
+
+export const charactersTable = pgTable('characters', {
+  id: text('id').primaryKey(),
+  tagId: text('tag_id').notNull(),
+  displayName: text('display_name').notNull(),
+  coverImageId: text('image_id').references(() => imagesTable.id),
+}, (t) => [
+  index('characters_tag_id_idx').on(t.tagId),
+])
+
+export const seriesTable = pgTable('series', {
+  id: text('id').primaryKey(),
+
+  titleRus: text('title_rus').notNull(),
+  titleEng: text('title_eng'),
+  titleJap: text('title_jap'),
+
+  coverImageId: text('cover_image_id').references(() => imagesTable.id),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at')
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (t) => [
+  index('series_title_rus_idx').on(t.titleRus),
+  index('series_title_eng_edx').on(t.titleEng)
+])
+
+export const seasonsTable = pgTable('seasons', {
+  id: text('id').primaryKey(),
+  seriesId: text('series_id').references(() => seriesTable.id).notNull(),
+
+  number: integer('number').notNull(),
+  title: text('title'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at')
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (t) => [
+  index('seasons_series_id_idx').on(t.seriesId)
+])
+
+export const episodesTable = pgTable('episodes', {
+  id: text('id').primaryKey(),
+  seasonId: text('season_id').references(() => seasonsTable.id).notNull(),
+
+  number: integer('number').notNull(),
+  title: text('title'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at')
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+})
+
+export const screenshotsTable = pgTable('screenshots', {
+  id: text('id').primaryKey(),
+
+  episodeId: text('episode_id').references(() => episodesTable.id).notNull(),
+  imageId: text('image_id').references(() => imagesTable.id).notNull(),
+
+  timestampSeconds: integer('timestamp_seconds'),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('screenshots_episode_id_idx').on(t.episodeId),
+])

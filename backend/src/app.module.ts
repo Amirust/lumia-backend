@@ -2,16 +2,22 @@ import { Module } from '@nestjs/common'
 import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import { ResponseModule } from '@app/response'
-import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ConfigModule, ConfigService } from '@nestjs/config'
 import { DB_CONNECTION, DbModule } from '@app/db'
 import { AuthGuard, AuthModule } from '@thallesp/nestjs-better-auth'
 import { NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
-import { APP_GUARD, APP_PIPE } from "@nestjs/core";
-import { ZodValidationPipe } from 'nestjs-zod';
+import { APP_GUARD, APP_PIPE } from '@nestjs/core'
+import { ZodValidationPipe } from 'nestjs-zod'
 import { getBasicConfig } from '@app/better-auth'
-import { snowflake } from "@app/utils/snowflake";
+import { snowflake } from '@app/utils/snowflake'
+import { UsersController } from './users/users.controller';
+import { UsersService } from './users/users.service';
+import { ImagesService } from './images/images.service';
+import { ImagesController } from './images/images.controller';
+import { AnimeController } from './anime/anime.controller';
+import { AnimeService } from './anime/anime.service';
 
 @Module({
   imports: [
@@ -47,6 +53,9 @@ import { snowflake } from "@app/utils/snowflake";
   ],
   controllers: [
     AppController,
+    UsersController,
+    ImagesController,
+    AnimeController,
   ],
   providers: [
     AppService,
@@ -57,7 +66,10 @@ import { snowflake } from "@app/utils/snowflake";
     {
       provide: APP_PIPE,
       useClass: ZodValidationPipe
-    }
+    },
+    UsersService,
+    ImagesService,
+    AnimeService
   ],
 })
 export class AppModule {}
