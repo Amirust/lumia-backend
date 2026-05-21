@@ -1,0 +1,29 @@
+version: '3'
+
+volumes:
+  postgres:
+
+networks:
+  lumia-network:
+
+services:
+  backend:
+    networks:
+      - lumia-network
+    depends_on:
+      - postgres
+    build:
+      dockerfile: Dockerfile
+      context: .
+    restart: unless-stopped
+
+  postgres:
+    networks:
+      - lumia-network
+    image: postgres:18-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    env_file:
+      - .env
+
