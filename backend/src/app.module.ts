@@ -15,9 +15,11 @@ import { snowflake } from '@app/utils/snowflake'
 import { UsersController } from './users/users.controller'
 import { UsersService } from './users/users.service'
 import { ImagesService } from './images/images.service'
-import { ImagesController } from './images/images.controller'
 import { AnimeController } from './anime/anime.controller'
 import { AnimeService } from './anime/anime.service'
+import { CharactersController } from './characters/characters.controller'
+import { CharactersService } from './characters/characters.service'
+import { GalleryController } from './gallery/gallery.controller';
 
 @Module({
   imports: [
@@ -54,8 +56,9 @@ import { AnimeService } from './anime/anime.service'
   controllers: [
     AppController,
     UsersController,
-    ImagesController,
     AnimeController,
+    CharactersController,
+    GalleryController,
   ],
   providers: [
     AppService,
@@ -69,7 +72,8 @@ import { AnimeService } from './anime/anime.service'
     },
     UsersService,
     ImagesService,
-    AnimeService
+    AnimeService,
+    CharactersService
   ],
 })
 export class AppModule {}

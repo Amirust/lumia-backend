@@ -17,9 +17,12 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "migrate:generate": "drizzle-kit generate",
+    "migrate:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1050.0",
     "@better-auth/drizzle-adapter": "^1.6.2",
     "@better-auth/passkey": "^1.6.2",
     "@fastify/cors": "^11.2.0",
@@ -90,6 +93,7 @@
     "moduleNameMapper": {
       "^@app/better-auth(|/.*)$": "<rootDir>/libs/better-auth/src/$1",
       "^@app/db(|/.*)$": "<rootDir>/libs/db/src/$1",
+      "^@app/r2(|/.*)$": "<rootDir>/libs/r2/src/$1",
       "^@app/response(|/.*)$": "<rootDir>/libs/response/src/$1",
       "^@app/types(|/.*)$": "<rootDir>/libs/types/src/$1",
       "^@app/utils(|/.*)$": "<rootDir>/libs/utils/src/$1"

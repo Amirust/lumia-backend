@@ -1,5 +1,6 @@
 import { index, integer, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core'
 import { user } from '@app/better-auth/auth.schema'
+import { sql } from 'drizzle-orm'
 
 export * from '@app/better-auth/auth.schema'
 
@@ -50,6 +51,8 @@ export const charactersTable = pgTable('characters', {
   coverImageId: text('image_id').references(() => imagesTable.id),
 }, (t) => [
   index('characters_tag_id_idx').on(t.tagId),
+  index('characters_display_name_trgm_idx')
+    .using('gin', sql`${t.displayName} gin_trgm_ops`),
 ])
 
 export const seriesTable = pgTable('series', {
@@ -68,7 +71,7 @@ export const seriesTable = pgTable('series', {
     .notNull(),
 }, (t) => [
   index('series_title_rus_idx').on(t.titleRus),
-  index('series_title_eng_edx').on(t.titleEng)
+  index('series_title_eng_idx').on(t.titleEng)
 ])
 
 export const seasonsTable = pgTable('seasons', {
@@ -99,7 +102,9 @@ export const episodesTable = pgTable('episodes', {
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
-})
+}, (t) => [
+  index('episodes_season_id_idx').on(t.seasonId),
+])
 
 export const screenshotsTable = pgTable('screenshots', {
   id: text('id').primaryKey(),
@@ -112,4 +117,6 @@ export const screenshotsTable = pgTable('screenshots', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [
   index('screenshots_episode_id_idx').on(t.episodeId),
+  index('screenshots_image_id_idx').on(t.imageId),
+  unique('screenshots_episode_image_unique').on(t.episodeId, t.imageId),
 ])

@@ -25,6 +25,15 @@
         "tsConfigPath": "libs/db/tsconfig.lib.json"
       }
     },
+    "r2": {
+      "type": "library",
+      "root": "libs/r2",
+      "entryFile": "index",
+      "sourceRoot": "libs/r2/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/r2/tsconfig.lib.json"
+      }
+    },
     "response": {
       "type": "library",
       "root": "libs/response",
