@@ -12,12 +12,12 @@ import { APP_GUARD, APP_PIPE } from '@nestjs/core'
 import { ZodValidationPipe } from 'nestjs-zod'
 import { getBasicConfig } from '@app/better-auth'
 import { snowflake } from '@app/utils/snowflake'
-import { UsersController } from './users/users.controller';
-import { UsersService } from './users/users.service';
-import { ImagesService } from './images/images.service';
-import { ImagesController } from './images/images.controller';
-import { AnimeController } from './anime/anime.controller';
-import { AnimeService } from './anime/anime.service';
+import { UsersController } from './users/users.controller'
+import { UsersService } from './users/users.service'
+import { ImagesService } from './images/images.service'
+import { ImagesController } from './images/images.controller'
+import { AnimeController } from './anime/anime.controller'
+import { AnimeService } from './anime/anime.service'
 
 @Module({
   imports: [
