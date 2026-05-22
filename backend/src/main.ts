@@ -6,6 +6,8 @@ import {
 } from '@nestjs/platform-fastify'
 import { Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import multipart from '@fastify/multipart'
+import { MaxFileCountPerTransaction, MaxFileSize } from '@app/types/constants'
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -16,6 +18,10 @@ async function bootstrap() {
       bodyParser: false
     },
   )
+
+  await app.register(multipart, {
+    limits: { fileSize: MaxFileSize, files: MaxFileCountPerTransaction },
+  })
 
   const config = app.get<ConfigService>(ConfigService)
   const logger = new Logger('Bootstrap')

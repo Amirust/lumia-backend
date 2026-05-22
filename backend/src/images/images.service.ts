@@ -1,7 +1,17 @@
-import { Inject, Injectable } from '@nestjs/common'
+import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
 import { episodesTable, imagesTable, screenshotsTable } from '@app/db/db.schema'
-import { and, arrayOverlaps, count, desc, eq, exists, getTableColumns, sql } from 'drizzle-orm'
+import { and, arrayOverlaps, count, desc, eq, exists, getTableColumns, inArray, sql } from 'drizzle-orm'
+import { UsersService } from '../users/users.service'
+import { UserPermission } from '@app/types/user.permissions'
+import { ErrorCode } from '@app/types/error-code.enum'
+import { R2Service } from '@app/r2'
+import { snowflake } from '@app/utils/snowflake'
+import { sha256 } from '@app/utils/sha256'
+import { ImageSourceType } from '@app/types/image.source-type.enum'
+import { ImageStatus } from '@app/types/image.status.enum'
+import { getStorageKey } from '@app/utils/get-storage-key'
+import { getFileMetaFromBuffer } from '@app/utils/get-file-meta-from-buffer'
 
 interface FindManyOptions {
   tags?: string[]
@@ -15,9 +25,13 @@ interface FindManyOptions {
 
 @Injectable()
 export class ImagesService {
+  private readonly logger = new Logger('ImagesService')
+
   constructor(
     @Inject(DB_CONNECTION)
     private readonly db: DrizzleDB,
+    private readonly usersService: UsersService,
+    private readonly r2Service: R2Service,
   ) {}
 
   async findOne(id: string) {
@@ -31,6 +45,86 @@ export class ImagesService {
 
   async findMany(limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
     return this.findManyDeep(limit, lastSeenId, options)
+  }
+
+  async uploadFiles(files: ArrayBuffer[], authorId: string, source: ImageSourceType) {
+    const hashes = await Promise.all(files.map(buffer => sha256(buffer)))
+
+    const duplicates = await this.db
+      .select({
+        id: imagesTable.id,
+        hash: imagesTable.contentHash,
+      })
+      .from(imagesTable)
+      .where(inArray(imagesTable.contentHash, hashes))
+
+    const filesWithMeta = files
+      .map((file, index) => ({ file, hash: hashes[index] }))
+      .filter(({ hash }) => !duplicates.some(d => d.hash === hash))
+      .map(({ file, hash }) => ({
+        meta: {
+          id: snowflake(),
+          authorId,
+          storageKey: getStorageKey(hash, authorId),
+
+          ...getFileMetaFromBuffer(file, hash, source),
+        },
+        buffer: file,
+      }))
+
+    // Todo process images to gen tags and thumbnails
+
+    /*
+     * Uploading and inserting in DB
+     */
+    return await Promise.all(filesWithMeta.map(async (file) => {
+      const inserted = await this.db
+        .insert(imagesTable)
+        .values({
+          ...file.meta,
+          status: ImageStatus.Pending,
+        })
+        .onConflictDoNothing()
+        .returning()
+
+      if (!inserted.length) {
+        this.logger.warn(`File with hash ${file.meta.contentHash} already exists, skipping upload`)
+        return null
+      }
+
+      await this.r2Service.upload(
+        file.meta.storageKey,
+        Buffer.from(file.buffer, 0, file.buffer.byteLength),
+        file.meta.mime
+      )
+
+      // todo: sse streaming to send new tags after ai to frontend
+      return inserted[0]
+    }))
+  }
+
+  async addTags(id: string, toAdd: string[]) {
+    const [ updated ] = await this.db
+      .update(imagesTable)
+      .set({
+        tags: sql`ARRAY(SELECT DISTINCT unnest(tags || ${toAdd}))`,
+      })
+      .where(eq(imagesTable.id, id))
+      .returning()
+
+    return updated
+  }
+
+  async removeTags(id: string, toRemove: string[]) {
+    const [ updated ] = await this.db
+      .update(imagesTable)
+      .set({
+        tags: sql`ARRAY(SELECT DISTINCT unnest(tags) EXCEPT SELECT unnest(${toRemove}::text[]))`,
+      })
+      .where(eq(imagesTable.id, id))
+      .returning()
+
+    return updated
   }
 
   async getAllTags() {
@@ -55,6 +149,26 @@ export class ImagesService {
 
     return count[0].estimate as number
   }
+
+  /*
+   * Permissions helpers
+   */
+
+  async ensureUserCan(id: string, userId: string, permission: UserPermission) {
+    const image = await this.findOne(id)
+
+    if (
+      !image ||
+      !(image.authorId === userId) ||
+      !await this.usersService.hasPermission(userId, permission)
+    ) throw new ForbiddenException({
+      code: ErrorCode.NotEnoughPermissions,
+    })
+  }
+
+  /*
+   * Internal methods
+   */
 
   private async findManyDeep(limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
     return this.db

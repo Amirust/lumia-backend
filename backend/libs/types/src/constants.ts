@@ -1,3 +1,4 @@
 export const SnowflakeEpoch = 1774994400000
 
-export const MessageGenerationProgressMagicString = '608545__message_generation_progress__541665'
+export const MaxFileSize = 4 * 1024 * 1024 // 4MB
+export const MaxFileCountPerTransaction = 10

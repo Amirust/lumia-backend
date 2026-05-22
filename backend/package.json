@@ -26,6 +26,7 @@
     "@better-auth/drizzle-adapter": "^1.6.2",
     "@better-auth/passkey": "^1.6.2",
     "@fastify/cors": "^11.2.0",
+    "@fastify/multipart": "^10.0.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
