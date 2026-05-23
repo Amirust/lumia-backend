@@ -1,4 +1,3 @@
-use std::num::NonZeroU32;
 use image::GenericImageView;
 use fast_image_resize::{PixelType, ResizeAlg, ResizeOptions, Resizer};
 use fast_image_resize::FilterType::Lanczos3;

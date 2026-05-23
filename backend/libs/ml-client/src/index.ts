@@ -1,2 +1,2 @@
-export * from './ml-client.module';
-export * from './ml-client.service';
+export * from './ml-client.module'
+export * from './ml-client.service'
