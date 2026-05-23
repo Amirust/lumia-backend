@@ -12,14 +12,11 @@ import { APP_GUARD, APP_PIPE } from '@nestjs/core'
 import { ZodValidationPipe } from 'nestjs-zod'
 import { getBasicConfig } from '@app/better-auth'
 import { snowflake } from '@app/utils/snowflake'
-import { UsersController } from './users/users.controller'
-import { UsersService } from './users/users.service'
-import { ImagesService } from './images/images.service'
-import { AnimeController } from './anime/anime.controller'
-import { AnimeService } from './anime/anime.service'
-import { CharactersController } from './characters/characters.controller'
-import { CharactersService } from './characters/characters.service'
-import { GalleryController } from './gallery/gallery.controller';
+import { ImagesModule } from './images/images.module'
+import { UsersModule } from './users/users.module'
+import { GalleryModule } from './gallery/gallery.module'
+import { AnimeModule } from './anime/anime.module'
+import { CharactersModule } from './characters/characters.module'
 
 @Module({
   imports: [
@@ -52,13 +49,15 @@ import { GalleryController } from './gallery/gallery.controller';
         }),
       })
     }),
+
+    UsersModule,
+    ImagesModule,
+    GalleryModule,
+    AnimeModule,
+    CharactersModule,
   ],
   controllers: [
     AppController,
-    UsersController,
-    AnimeController,
-    CharactersController,
-    GalleryController,
   ],
   providers: [
     AppService,
@@ -70,10 +69,6 @@ import { GalleryController } from './gallery/gallery.controller';
       provide: APP_PIPE,
       useClass: ZodValidationPipe
     },
-    UsersService,
-    ImagesService,
-    AnimeService,
-    CharactersService
   ],
 })
 export class AppModule {}

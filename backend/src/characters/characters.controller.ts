@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common'
 import { CharactersService } from './characters.service'
-import SearchCharacterDto from '../dto/character'
+import SearchCharacterDto from './dto/search-character.dto'
 
 @Controller('characters')
 export class CharactersController {

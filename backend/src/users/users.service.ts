@@ -1,10 +1,9 @@
-import { ForbiddenException, Inject, Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
 import { user } from '@app/db/db.schema'
 import { eq } from 'drizzle-orm'
 import { UserPermission } from '@app/types/user.permissions'
 import { bitmaskHas } from '@app/utils/bitmask'
-import { ErrorCode } from '@app/types/error-code.enum'
 
 @Injectable()
 export class UsersService {

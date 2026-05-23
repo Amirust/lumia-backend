@@ -12,6 +12,7 @@ import { ImageSourceType } from '@app/types/image.source-type.enum'
 import { ImageStatus } from '@app/types/image.status.enum'
 import { getStorageKey } from '@app/utils/get-storage-key'
 import { getFileMetaFromBuffer } from '@app/utils/get-file-meta-from-buffer'
+import { MlClientService } from '@app/ml-client'
 
 interface FindManyOptions {
   tags?: string[]
@@ -32,6 +33,7 @@ export class ImagesService {
     private readonly db: DrizzleDB,
     private readonly usersService: UsersService,
     private readonly r2Service: R2Service,
+    private readonly mlService: MlClientService
   ) {}
 
   async findOne(id: string) {
@@ -73,6 +75,7 @@ export class ImagesService {
       }))
 
     // Todo process images to gen tags and thumbnails
+    const tags = await this.mlService.getTags(files[0])
 
     /*
      * Uploading and inserting in DB

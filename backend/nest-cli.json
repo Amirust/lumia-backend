@@ -25,6 +25,15 @@
         "tsConfigPath": "libs/db/tsconfig.lib.json"
       }
     },
+    "ml-client": {
+      "type": "library",
+      "root": "libs/ml-client",
+      "entryFile": "index",
+      "sourceRoot": "libs/ml-client/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/ml-client/tsconfig.lib.json"
+      }
+    },
     "r2": {
       "type": "library",
       "root": "libs/r2",
