@@ -13,12 +13,10 @@ pub fn create_thumbnail(orig_img: &image::DynamicImage) -> Vec<u8> {
     let scale = THUMB_LONG_SIDE as f32 / w.max(h) as f32;
 
     let img = orig_img.to_rgba8();
-    let width = NonZeroU32::new(img.width()).unwrap();
-    let height = NonZeroU32::new(img.height()).unwrap();
 
     let src_image = Image::from_vec_u8(
-        u32::from(width),
-        u32::from(height),
+        w,
+        h,
         img.into_raw(),
         PixelType::U8x4,
     ).unwrap();
