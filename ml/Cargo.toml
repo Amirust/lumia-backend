@@ -4,8 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["multipart"] }
 ort = "2.0.0-rc.12"
 image = "0.25.10"
 ndarray = "0.17.2"
 serde_json = "1"
+tokio = { version = "1.52.3", features = ["full"] }
+tracing-subscriber = "0.3.23"
+webp = "0.3.1"
+fast_image_resize={ version = "6.0.0", features = ["rayon"] }

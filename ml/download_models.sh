@@ -15,8 +15,8 @@ dl() {
     curl -fL --retry 3 --retry-delay 2 -o "$dest" "$url"
 }
 
-dl "$BASE/camie-tagger-v2.onnx"          "tagger_new.onnx"
-dl "$BASE/camie-tagger-v2-metadata.json" "tagger_new_meta.json"
-dl "$BASE/full_validation_results.json"  "tagger_new_val_res.json"
+dl "$BASE/camie-tagger-v2.onnx"          "tagger.onnx"
+dl "$BASE/camie-tagger-v2-metadata.json" "tagger_meta.json"
+dl "$BASE/full_validation_results.json"  "tagger_val_res.json"
 
 echo "Ready -> $DIR"
