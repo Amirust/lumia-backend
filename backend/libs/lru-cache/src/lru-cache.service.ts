@@ -58,14 +58,13 @@ export class LruCacheService {
 
   private setExpireInterval() {
     this.expireInterval = setInterval(() => {
-      const now = Date.now()
-      const entries = this.cache.entries()
-
-      if (entries.next().done) {
+      if (!this.cache.size) {
         if (this.expireInterval) clearInterval(this.expireInterval)
         this.expireInterval = null
         return
       }
+
+      const now = Date.now()
 
       for (const [ key, item ] of this.cache.entries()) {
         if (item.exp < now)
