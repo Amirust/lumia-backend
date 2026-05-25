@@ -34,6 +34,12 @@
       "@app/db/*": [
         "libs/db/src/*"
       ],
+      "@app/lru-cache": [
+        "libs/lru-cache/src"
+      ],
+      "@app/lru-cache/*": [
+        "libs/lru-cache/src/*"
+      ],
       "@app/ml-client": [
         "libs/ml-client/src"
       ],
@@ -51,6 +57,12 @@
       ],
       "@app/response/*": [
         "libs/response/src/*"
+      ],
+      "@app/task-queue": [
+        "libs/task-queue/src"
+      ],
+      "@app/task-queue/*": [
+        "libs/task-queue/src/*"
       ],
       "@app/types": [
         "libs/types/src"

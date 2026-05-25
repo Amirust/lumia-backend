@@ -1,6 +1,7 @@
-import { index, integer, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core'
+import { index, integer, interval, jsonb, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core'
 import { user } from '@app/better-auth/auth.schema'
 import { sql } from 'drizzle-orm'
+import { TimeUnit } from '@app/types/time-unit.enum'
 
 export * from '@app/better-auth/auth.schema'
 
@@ -8,6 +9,8 @@ export * from '@app/better-auth/auth.schema'
 
 const sourceTypeEnum = pgEnum('source_type', [ 'fanart', 'screenshot' ])
 const uploadStatusEnum = pgEnum('upload_status', [ 'uploading', 'pending', 'indexing', 'done', 'failed' ])
+
+const taskStateEnum = pgEnum('task_state', [ 'created', 'active', 'completed', 'cancelled', 'failed', 'retry' ])
 
 /* --- TABLES --- */
 
@@ -26,7 +29,9 @@ export const imagesTable = pgTable('images', {
   fileSize: integer('file_size'),
 
   sourceType: sourceTypeEnum('source_type').notNull(),
+
   tags: text('tags').array().default([]).notNull(),
+  tagsByCategory: jsonb('tags_by_category').default({}).notNull(),
 
   status: uploadStatusEnum('upload_status').notNull(),
   errorMessage: text('error_message'),
@@ -120,3 +125,31 @@ export const screenshotsTable = pgTable('screenshots', {
   index('screenshots_image_id_idx').on(t.imageId),
   unique('screenshots_episode_image_unique').on(t.episodeId, t.imageId),
 ])
+
+export const taskQueueTable = pgTable('task_queue', {
+  id: text('id').primaryKey(),
+
+  name: text('name').notNull(),
+  data: jsonb('data').notNull(),
+
+  state: taskStateEnum('state').notNull(),
+
+  retryLimit: integer('retry_limit').default(0).notNull(),
+  retryCount: integer('retry_count').default(0).notNull(),
+  // in milliseconds
+  retryDelay: integer('retry_delay').default(0).notNull(),
+
+  startAfter: timestamp('start_after').defaultNow().notNull(),
+  startedOn: timestamp('started_on'),
+
+  singletonKey: text('singleton_key'),
+
+  expireIn: interval('expire_in').notNull().default('15 minutes'),
+
+  completedOn: timestamp('completed_on'),
+  keepUntil: timestamp('keep_until').default(new Date(Date.now() + (TimeUnit.Day * 14))),
+}, (t) => [
+  unique('task_queue_singleton_key_unique').on(t.singletonKey),
+])
+
+export type QueueTask = typeof taskQueueTable.$inferSelect

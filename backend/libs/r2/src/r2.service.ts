@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 
 @Injectable()
 export class R2Service implements OnModuleInit {
@@ -53,6 +53,24 @@ export class R2Service implements OnModuleInit {
     this.logger.log(`File deleted from R2: ${key}`)
 
     return true
+  }
+
+  async download(key: string) {
+    const result = await this.s3Client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      })
+    )
+
+    if (!result.Body)
+      return null
+
+    const buffer = await result.Body?.transformToByteArray()
+
+    this.logger.log(`File downloaded from R2: ${key}`)
+
+    return Buffer.from(buffer)
   }
 
 

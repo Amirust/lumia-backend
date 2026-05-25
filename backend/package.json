@@ -94,9 +94,11 @@
     "moduleNameMapper": {
       "^@app/better-auth(|/.*)$": "<rootDir>/libs/better-auth/src/$1",
       "^@app/db(|/.*)$": "<rootDir>/libs/db/src/$1",
+      "^@app/lru-cache(|/.*)$": "<rootDir>/libs/lru-cache/src/$1",
       "^@app/ml-client(|/.*)$": "<rootDir>/libs/ml-client/src/$1",
       "^@app/r2(|/.*)$": "<rootDir>/libs/r2/src/$1",
       "^@app/response(|/.*)$": "<rootDir>/libs/response/src/$1",
+      "^@app/task-queue(|/.*)$": "<rootDir>/libs/task-queue/src/$1",
       "^@app/types(|/.*)$": "<rootDir>/libs/types/src/$1",
       "^@app/utils(|/.*)$": "<rootDir>/libs/utils/src/$1"
     }

@@ -25,6 +25,15 @@
         "tsConfigPath": "libs/db/tsconfig.lib.json"
       }
     },
+    "lru-cache": {
+      "type": "library",
+      "root": "libs/lru-cache",
+      "entryFile": "index",
+      "sourceRoot": "libs/lru-cache/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/lru-cache/tsconfig.lib.json"
+      }
+    },
     "ml-client": {
       "type": "library",
       "root": "libs/ml-client",
@@ -50,6 +59,15 @@
       "sourceRoot": "libs/response/src",
       "compilerOptions": {
         "tsConfigPath": "libs/response/tsconfig.lib.json"
+      }
+    },
+    "task-queue": {
+      "type": "library",
+      "root": "libs/task-queue",
+      "entryFile": "index",
+      "sourceRoot": "libs/task-queue/src",
+      "compilerOptions": {
+        "tsConfigPath": "libs/task-queue/tsconfig.lib.json"
       }
     },
     "types": {

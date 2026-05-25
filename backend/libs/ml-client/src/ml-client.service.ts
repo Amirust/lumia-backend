@@ -15,9 +15,13 @@ export class MlClientService implements OnModuleInit {
     this.apiUrl = this.configService.get<string>('ML_API_URL') ?? null
   }
 
-  async getTags(file: ArrayBuffer): Promise<GetTagsResult> {
+  async getTags(file: ArrayBuffer | Buffer): Promise<GetTagsResult> {
+    const part: BlobPart = Buffer.isBuffer(file)
+      ? new Uint8Array(file.buffer as ArrayBuffer, file.byteOffset, file.byteLength)
+      : file
+
     const formData = new FormData()
-    formData.append('file', new Blob([ file ]), ML_BODY_FILE_NAME)
+    formData.append('file', new Blob([ part ]), ML_BODY_FILE_NAME)
 
     const response = await this.callApi(MlClientEndpoint.GetTags, formData)
     if (!response.ok)
@@ -26,9 +30,13 @@ export class MlClientService implements OnModuleInit {
     return response.json()
   }
 
-  async getWebpThumbnail(file: ArrayBuffer): Promise<ArrayBuffer> {
+  async getWebpThumbnail(file: ArrayBuffer | Buffer): Promise<ArrayBuffer> {
+    const part: BlobPart = Buffer.isBuffer(file)
+      ? new Uint8Array(file.buffer as ArrayBuffer, file.byteOffset, file.byteLength)
+      : file
+
     const formData = new FormData()
-    formData.append('file', new Blob([ file ]), ML_BODY_FILE_NAME)
+    formData.append('file', new Blob([ part ]), ML_BODY_FILE_NAME)
 
     const response = await this.callApi(MlClientEndpoint.GetThumbnail, formData)
     if (!response.ok)
