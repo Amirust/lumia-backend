@@ -1,0 +1,12 @@
+export enum EventType {
+  AiTagsResolved
+}
+
+export const EventKey = {
+  AiTagsResolved: (imageId: string) => `image:${imageId}:ai-tags-resolved`
+}
+
+export interface EventPayload {
+  type: EventType;
+  data: any;
+}

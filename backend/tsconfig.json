@@ -34,6 +34,12 @@
       "@app/db/*": [
         "libs/db/src/*"
       ],
+      "@app/events": [
+        "libs/events/src"
+      ],
+      "@app/events/*": [
+        "libs/events/src/*"
+      ],
       "@app/lru-cache": [
         "libs/lru-cache/src"
       ],

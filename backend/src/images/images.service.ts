@@ -24,6 +24,8 @@ import { LruCache } from '@app/lru-cache'
 import { TaskQueueService, TaskType } from '@app/task-queue'
 import { JobHandler } from '@app/task-queue/decorators/job.decorator'
 import { TagsCategory } from '@app/ml-client/ml-client.types'
+import { EventsService } from '@app/events'
+import { EventKey, EventType } from '@app/events/events.types'
 
 interface FindManyOptions {
   tags?: string[];
@@ -37,8 +39,8 @@ interface FindManyOptions {
 
 interface ImageResponse extends ImageRecord {
   tagsByCategory: {
-    [category in TagsCategory]?: string[]
-  }
+    [category in TagsCategory]?: string[];
+  };
 }
 
 @Injectable()
@@ -55,6 +57,7 @@ export class ImagesService {
     private readonly r2Service: R2Service,
     private readonly mlService: MlClientService,
     private readonly taskQueue: TaskQueueService,
+    private readonly events: EventsService,
   ) {}
 
   async findOne(id: string) {
@@ -143,7 +146,11 @@ export class ImagesService {
 
     for (const image of uploaded.filter((i) => !!i)) {
       await this.taskQueue.send(TaskType.GetTags, { imageId: image.id }, { singletonKey: `get-tags-${image.id}` })
-      await this.taskQueue.send(TaskType.GetWebpThumbnail, { imageId: image.id }, { singletonKey: `get-webp-${image.id}` })
+      await this.taskQueue.send(
+        TaskType.GetWebpThumbnail,
+        { imageId: image.id },
+        { singletonKey: `get-webp-${image.id}` },
+      )
     }
   }
 
@@ -172,7 +179,10 @@ export class ImagesService {
       .where(
         and(
           eq(tagsToImagesTable.imageId, id),
-          inArray(tagsToImagesTable.tagId, ids.map(({ id }) => id)),
+          inArray(
+            tagsToImagesTable.tagId,
+            ids.map(({ id }) => id),
+          ),
         ),
       )
       .returning()
@@ -225,8 +235,7 @@ export class ImagesService {
       const resolvedExcludeTags = options.excludeTags ? await this.resolveTagsIds(options.excludeTags) : []
 
       // If some tags were not found, it means no images can be found, so we can return early
-      if ((options.tags?.length ?? 0) > resolvedTags.length)
-        return { ids: [], afterFilter: 0 }
+      if ((options.tags?.length ?? 0) > resolvedTags.length) return { ids: [], afterFilter: 0 }
 
       tagsIds.push(...resolvedTags.map(({ id }) => id))
       excludeTagsIds.push(...resolvedExcludeTags.map(({ id }) => id))
@@ -253,12 +262,7 @@ export class ImagesService {
               this.db
                 .select({ x: sql`1` })
                 .from(tagsToImagesTable)
-                .where(
-                  and(
-                    eq(tagsToImagesTable.imageId, imagesTable.id),
-                    inArray(tagsToImagesTable.tagId, tagsIds),
-                  ),
-                ),
+                .where(and(eq(tagsToImagesTable.imageId, imagesTable.id), inArray(tagsToImagesTable.tagId, tagsIds))),
             )
             : undefined,
 
@@ -310,9 +314,7 @@ export class ImagesService {
       .orderBy(sql`${imagesTable.id}::bigint`)
       .limit(limit)
 
-    const afterFilter = result.length && 'afterFilter' in result[0] ?
-      result[0].afterFilter :
-      undefined
+    const afterFilter = result.length && 'afterFilter' in result[0] ? result[0].afterFilter : undefined
 
     return {
       ids: result.map((r) => r.id),
@@ -349,8 +351,7 @@ export class ImagesService {
       .filter((id) => !missingIds.includes(id))
       .map((id) => this.lruCacheImages.get<ImageResponse>(id)!)
 
-    for (const image of addImages)
-      this.lruCacheImages.set(image.id, image)
+    for (const image of addImages) this.lruCacheImages.set(image.id, image)
 
     return [ ...inCache, ...addImages ]
   }
@@ -363,13 +364,11 @@ export class ImagesService {
   private async handleGetTags({ imageId }: { imageId: string }) {
     const image = await this.findOne(imageId)
 
-    if (!image)
-      return
+    if (!image) return
 
-    const buffer = this.lruCacheImageBuffers.get<Buffer>(imageId) ?? await this.r2Service.download(image.storageKey!)
+    const buffer = this.lruCacheImageBuffers.get<Buffer>(imageId) ?? (await this.r2Service.download(image.storageKey!))
 
-    if (!buffer)
-      return
+    if (!buffer) return
 
     const tags = await this.mlService.getTags(buffer)
     const tagsArray = Object.entries(tags)
@@ -384,24 +383,34 @@ export class ImagesService {
         status: ImageStatus.Done,
       })
       .where(eq(imagesTable.id, imageId))
+
+    this.events.emit(EventKey.AiTagsResolved(imageId), {
+      type: EventType.AiTagsResolved,
+      data: {
+        imageId,
+        tags
+      }
+    })
   }
 
   @JobHandler(TaskType.GetWebpThumbnail)
   private async handleGetWebpThumbnail({ imageId }: { imageId: string }) {
     const image = await this.findOne(imageId)
 
-    if (!image)
-      return
+    if (!image) return
 
-    const buffer = this.lruCacheImageBuffers.get<Buffer>(imageId) ?? await this.r2Service.download(image.storageKey!)
+    const buffer = this.lruCacheImageBuffers.get<Buffer>(imageId) ?? (await this.r2Service.download(image.storageKey!))
 
-    if (!buffer)
-      return
+    if (!buffer) return
 
     const webpBuffer = await this.mlService.getWebpThumbnail(buffer)
     const webpNormalBuffer = Buffer.from(webpBuffer, 0, webpBuffer.byteLength)
 
-    await this.r2Service.upload(getStorageKeyThumbnail(image.contentHash, image.authorId), webpNormalBuffer, 'image/webp')
+    await this.r2Service.upload(
+      getStorageKeyThumbnail(image.contentHash, image.authorId),
+      webpNormalBuffer,
+      'image/webp',
+    )
 
     await this.db
       .update(imagesTable)
