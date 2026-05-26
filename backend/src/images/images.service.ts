@@ -46,7 +46,7 @@ export class ImagesService {
   private readonly logger = new Logger('ImagesService')
 
   private readonly lruCacheImageBuffers = new LruCache()
-  private readonly lruCacheImages = new LruCache()
+  private readonly lruCacheImages = new LruCache({ maxSize: 10 * 1024 * 1024 }) // 10mb
 
   constructor(
     @Inject(DB_CONNECTION)

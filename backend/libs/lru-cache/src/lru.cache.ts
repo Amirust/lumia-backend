@@ -1,6 +1,6 @@
 import { TimeUnit } from '@app/types/time-unit.enum'
 
-const DEFAULT_CACHE_SIZE = 100
+const DEFAULT_CACHE_SIZE = 100 * 1024 * 1024 // 100 MB
 const DEFAULT_MAX_ITEMS = 50
 const DEFAULT_TTL = 5 * TimeUnit.Minute
 const DEFAULT_EXPIRE_CHECK_INTERVAL = TimeUnit.Minute
@@ -20,8 +20,10 @@ export class LruCache {
 
   private expireInterval: NodeJS.Timeout | null
 
-  constructor() {
-
+  constructor(options?: LruCacheOptions) {
+    if (options?.maxSize) this.maxSize = options.maxSize
+    if (options?.maxItems) this.maxItems = options.maxItems
+    if (options?.ttl) this.ttl = options.ttl
   }
 
   get<T>(key: string): T | undefined {
