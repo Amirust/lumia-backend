@@ -33,6 +33,8 @@
     "@nestjs/platform-fastify": "^11.1.18",
     "@nestjs/swagger": "^11.2.7",
     "@openrouter/ai-sdk-provider": "^2.8.0",
+    "@scalar/fastify-api-reference": "^1.57.5",
+    "@scalar/nestjs-api-reference": "^1.1.19",
     "@thallesp/nestjs-better-auth": "^2.4.0",
     "@types/pg": "^8.20.0",
     "better-auth": "^1.6.2",

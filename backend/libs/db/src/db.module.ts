@@ -9,6 +9,7 @@ import * as schema from './db.schema'
   providers: [
     {
       provide: DB_CONNECTION,
+      inject: [ ConfigService ],
       useFactory: async (configService: ConfigService) => {
         return drizzle({
           connection: {

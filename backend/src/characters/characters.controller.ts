@@ -1,7 +1,11 @@
 import { Controller, Get, Param, Query } from '@nestjs/common'
+import { ApiNotFoundResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
+import { ApiOkResponseWrapped } from '@app/response'
 import { CharactersService } from './characters.service'
 import SearchCharacterDto from './dto/search-character.dto'
+import CharacterResponseDto from './dto/character.response.dto'
 
+@ApiTags('characters')
 @Controller('characters')
 export class CharactersController {
   constructor(
@@ -9,6 +13,8 @@ export class CharactersController {
   ) {}
 
   @Get()
+  @ApiOperation({ summary: 'List characters' })
+  @ApiOkResponseWrapped(CharacterResponseDto, { isArray: true })
   async getCharacters(
     @Query() query: SearchCharacterDto
   ) {
@@ -22,6 +28,10 @@ export class CharactersController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get character by id' })
+  @ApiParam({ name: 'id' })
+  @ApiOkResponseWrapped(CharacterResponseDto)
+  @ApiNotFoundResponse({ description: 'Character not found' })
   async getCharacter(
     @Param('id') id: string
   ) {
