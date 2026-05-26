@@ -13,7 +13,7 @@ export class UsersController {
     @Session() session: UserSession,
     @Param('id') id: string
   ) {
-    if (id === 'me') id = session.user.id
+    if (id === '@me') id = session.user.id
 
     return this.usersService.getUser(id)
   }

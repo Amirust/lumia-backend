@@ -30,9 +30,6 @@ export const imagesTable = pgTable('images', {
 
   sourceType: sourceTypeEnum('source_type').notNull(),
 
-  tags: text('tags').array().default([]).notNull(),
-  tagsByCategory: jsonb('tags_by_category').default({}).notNull(),
-
   status: uploadStatusEnum('upload_status').notNull(),
   errorMessage: text('error_message'),
 
@@ -45,7 +42,6 @@ export const imagesTable = pgTable('images', {
   index('images_author_id_idx').on(t.authorId),
   index('images_status_idx').on(t.status),
   index('images_source_type_idx').on(t.sourceType),
-  index('images_tags_idx').using('gin', t.tags),
   unique('images_content_hash_unique').on(t.contentHash),
 ])
 
@@ -126,6 +122,30 @@ export const screenshotsTable = pgTable('screenshots', {
   unique('screenshots_episode_image_unique').on(t.episodeId, t.imageId),
 ])
 
+export const tagsTable = pgTable('tags', {
+  id: integer('id').generatedAlwaysAsIdentity(),
+
+  name: text('name').notNull(),
+  category: text('category'),
+
+  usageCount: integer('usage_count').default(0).notNull(),
+}, (t) => [
+  unique('tags_name_unique').on(t.name),
+])
+
+export const tagsToImagesTable = pgTable('tags_to_images', {
+  tagId: integer('tag_id')
+    .references(() => tagsTable.id, { onDelete: 'restrict' })
+    .notNull(),
+
+  imageId: text('image_id')
+    .references(() => imagesTable.id, { onDelete: 'cascade' })
+    .notNull(),
+}, (t) => [
+  unique('tags_to_images_unique').on(t.tagId, t.imageId),
+  index('tags_to_images_tag_id_idx').on(t.tagId),
+])
+
 export const taskQueueTable = pgTable('task_queue', {
   id: text('id').primaryKey(),
 
@@ -152,4 +172,5 @@ export const taskQueueTable = pgTable('task_queue', {
   unique('task_queue_singleton_key_unique').on(t.singletonKey),
 ])
 
-export type QueueTask = typeof taskQueueTable.$inferSelect
+export type QueueTask = typeof taskQueueTable.$inferSelect;
+export type ImageRecord = typeof imagesTable.$inferSelect;

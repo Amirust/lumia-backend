@@ -1,4 +1,3 @@
-import { Injectable } from '@nestjs/common'
 import { TimeUnit } from '@app/types/time-unit.enum'
 
 const DEFAULT_CACHE_SIZE = 100
@@ -6,8 +5,13 @@ const DEFAULT_MAX_ITEMS = 50
 const DEFAULT_TTL = 5 * TimeUnit.Minute
 const DEFAULT_EXPIRE_CHECK_INTERVAL = TimeUnit.Minute
 
-@Injectable()
-export class LruCacheService {
+interface LruCacheOptions {
+  maxSize?: number
+  maxItems?: number
+  ttl?: number
+}
+
+export class LruCache {
   private cache = new Map<string, { value: any, exp: number }>()
 
   private readonly maxSize: number = DEFAULT_CACHE_SIZE
@@ -15,6 +19,10 @@ export class LruCacheService {
   private readonly ttl: number = DEFAULT_TTL
 
   private expireInterval: NodeJS.Timeout | null
+
+  constructor() {
+
+  }
 
   get<T>(key: string): T | undefined {
     const item = this.cache.get(key)
@@ -42,6 +50,11 @@ export class LruCacheService {
     this.cache.set(key, { value, exp: Date.now() + this.ttl })
 
     if (!this.expireInterval) this.setExpireInterval()
+  }
+
+  has(key: string): boolean {
+    const item = this.cache.get(key)
+    return !!item && item.exp > Date.now()
   }
 
   getCurrentSize(): number {

@@ -16,5 +16,5 @@ export enum TagsCategory {
 export const ML_BODY_FILE_NAME = 'image'
 
 export type GetTagsResult = {
-  [k in TagsCategory]: string[];
+  [k in TagsCategory]?: string[];
 }

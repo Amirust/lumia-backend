@@ -1,7 +1,14 @@
 import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
-import { episodesTable, imagesTable, screenshotsTable } from '@app/db/db.schema'
-import { and, arrayOverlaps, count, desc, eq, exists, getTableColumns, inArray, sql } from 'drizzle-orm'
+import {
+  episodesTable,
+  ImageRecord,
+  imagesTable,
+  screenshotsTable,
+  tagsTable,
+  tagsToImagesTable,
+} from '@app/db/db.schema'
+import { and, eq, exists, getTableColumns, inArray, notExists, sql } from 'drizzle-orm'
 import { UsersService } from '../users/users.service'
 import { UserPermission } from '@app/types/user.permissions'
 import { ErrorCode } from '@app/types/error-code.enum'
@@ -13,9 +20,10 @@ import { ImageStatus } from '@app/types/image.status.enum'
 import { getStorageKey, getStorageKeyThumbnail } from '@app/utils/get-storage-key'
 import { getFileMetaFromBuffer } from '@app/utils/get-file-meta-from-buffer'
 import { MlClientService } from '@app/ml-client'
-import { LruCacheService } from '@app/lru-cache'
+import { LruCache } from '@app/lru-cache'
 import { TaskQueueService, TaskType } from '@app/task-queue'
 import { JobHandler } from '@app/task-queue/decorators/job.decorator'
+import { TagsCategory } from '@app/ml-client/ml-client.types'
 
 interface FindManyOptions {
   tags?: string[];
@@ -27,9 +35,18 @@ interface FindManyOptions {
   episodeId?: string;
 }
 
+interface ImageResponse extends ImageRecord {
+  tagsByCategory: {
+    [category in TagsCategory]?: string[]
+  }
+}
+
 @Injectable()
 export class ImagesService {
   private readonly logger = new Logger('ImagesService')
+
+  private readonly lruCacheImageBuffers = new LruCache()
+  private readonly lruCacheImages = new LruCache()
 
   constructor(
     @Inject(DB_CONNECTION)
@@ -38,7 +55,6 @@ export class ImagesService {
     private readonly r2Service: R2Service,
     private readonly mlService: MlClientService,
     private readonly taskQueue: TaskQueueService,
-    private readonly lruCache: LruCacheService,
   ) {}
 
   async findOne(id: string) {
@@ -48,7 +64,18 @@ export class ImagesService {
   }
 
   async findMany(limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
-    return this.findManyDeep(limit, lastSeenId, options)
+    const result = await this.findManyDeep(limit, lastSeenId, options)
+
+    if (!result.ids.length)
+      return {
+        images: [],
+        afterFilter: result.afterFilter,
+      }
+
+    return {
+      images: await this.resolveImages(result.ids),
+      afterFilter: result.afterFilter,
+    }
   }
 
   async uploadFiles(files: ArrayBuffer[], authorId: string, source: ImageSourceType) {
@@ -106,13 +133,12 @@ export class ImagesService {
           })
           .where(eq(imagesTable.id, file.meta.id))
 
-        this.lruCache.set(file.meta.id, buffer)
+        this.lruCacheImageBuffers.set(file.meta.id, buffer)
 
         return inserted[0]
       }),
     )
 
-    // Todo process images to gen tags and thumbnails
     // todo: sse streaming to send new tags after ai to frontend
 
     for (const image of uploaded.filter((i) => !!i)) {
@@ -122,54 +148,36 @@ export class ImagesService {
   }
 
   async addTags(id: string, toAdd: string[]) {
-    // todo добавить сразу определение категории + обновление tagsByCategory
+    const ids = await this.resolveTagsIds(toAdd)
 
     const [ updated ] = await this.db
-      .update(imagesTable)
-      .set({
-        tags: sql`ARRAY(SELECT DISTINCT unnest(tags || ${toAdd}))`,
-      })
-      .where(eq(imagesTable.id, id))
+      .insert(tagsToImagesTable)
+      .values(
+        ids.map(({ id: tagId }) => ({
+          tagId,
+          imageId: id,
+        })),
+      )
+      .onConflictDoNothing()
       .returning()
 
     return updated
   }
 
   async removeTags(id: string, toRemove: string[]) {
+    const ids = await this.resolveTagsIds(toRemove)
+
     const [ updated ] = await this.db
-      .update(imagesTable)
-      .set({
-        tags: sql`ARRAY(SELECT DISTINCT unnest(tags) EXCEPT SELECT unnest(${toRemove}::text[]))`,
-      })
-      .where(eq(imagesTable.id, id))
+      .delete(tagsToImagesTable)
+      .where(
+        and(
+          eq(tagsToImagesTable.imageId, id),
+          inArray(tagsToImagesTable.tagId, ids.map(({ id }) => id)),
+        ),
+      )
       .returning()
 
     return updated
-  }
-
-  async setTagsByCategory(id: string, tagsByCategory: Record<string, string[]>) {
-    const [ updated ] = await this.db
-      .update(imagesTable)
-      .set({
-        tagsByCategory,
-      })
-      .where(eq(imagesTable.id, id))
-      .returning()
-
-    return updated
-  }
-
-  async getAllTags() {
-    const freq = count()
-
-    return this.db
-      .select({
-        tag: sql`unnest (${imagesTable.tags})`,
-        count: freq,
-      })
-      .from(imagesTable)
-      .groupBy(sql`tags`)
-      .orderBy(desc(freq), sql`tag`)
   }
 
   async getTotalCount() {
@@ -199,10 +207,34 @@ export class ImagesService {
    * Internal methods
    */
 
-  private async findManyDeep(limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
+  private async resolveTagsIds(tags: string[]) {
     return this.db
       .select({
-        ...getTableColumns(imagesTable),
+        id: tagsTable.id,
+      })
+      .from(tagsTable)
+      .where(inArray(tagsTable.name, tags))
+  }
+
+  private async findManyDeep(limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
+    const tagsIds: number[] = []
+    const excludeTagsIds: number[] = []
+
+    if (options.tags?.length || options.excludeTags?.length) {
+      const resolvedTags = options.tags ? await this.resolveTagsIds(options.tags) : []
+      const resolvedExcludeTags = options.excludeTags ? await this.resolveTagsIds(options.excludeTags) : []
+
+      // If some tags were not found, it means no images can be found, so we can return early
+      if ((options.tags?.length ?? 0) > resolvedTags.length)
+        return { ids: [], afterFilter: 0 }
+
+      tagsIds.push(...resolvedTags.map(({ id }) => id))
+      excludeTagsIds.push(...resolvedExcludeTags.map(({ id }) => id))
+    }
+
+    const result = await this.db
+      .select({
+        id: imagesTable.id,
         ...(lastSeenId
           ? {}
           : {
@@ -212,11 +244,39 @@ export class ImagesService {
       .from(imagesTable)
       .where(
         and(
+          // Pagination
           lastSeenId ? sql`${imagesTable.id}::bigint > ${lastSeenId}::bigint` : undefined,
 
-          options.tags ? arrayOverlaps(imagesTable.tags, options.tags) : undefined,
+          // tags here
+          options.tags?.length
+            ? exists(
+              this.db
+                .select({ x: sql`1` })
+                .from(tagsToImagesTable)
+                .where(
+                  and(
+                    eq(tagsToImagesTable.imageId, imagesTable.id),
+                    inArray(tagsToImagesTable.tagId, tagsIds),
+                  ),
+                ),
+            )
+            : undefined,
 
-          options.excludeTags ? sql`NOT (${arrayOverlaps(imagesTable.tags, options.excludeTags)})` : undefined,
+          options.excludeTags?.length
+            ? notExists(
+              this.db
+                .select({ x: sql`1` })
+                .from(tagsToImagesTable)
+                .where(
+                  and(
+                    eq(tagsToImagesTable.imageId, imagesTable.id),
+                    inArray(tagsToImagesTable.tagId, excludeTagsIds),
+                  ),
+                ),
+            )
+            : undefined,
+
+          // Other meta-stuff
 
           options.authorId ? eq(imagesTable.authorId, options.authorId) : undefined,
 
@@ -249,6 +309,50 @@ export class ImagesService {
       )
       .orderBy(sql`${imagesTable.id}::bigint`)
       .limit(limit)
+
+    const afterFilter = result.length && 'afterFilter' in result[0] ?
+      result[0].afterFilter :
+      undefined
+
+    return {
+      ids: result.map((r) => r.id),
+      afterFilter,
+    }
+  }
+
+  private async resolveImages(imagesIds: string[]) {
+    const missingIds = imagesIds.filter((id) => !this.lruCacheImages.has(id))
+    let addImages: ImageResponse[] = []
+
+    if (missingIds.length) {
+      addImages = await this.db
+        .select({
+          ...getTableColumns(imagesTable),
+          tagsByCategory: sql<Record<string, string[]>>`
+            COALESCE((
+              SELECT jsonb_object_agg(category, tag_names)
+              FROM (
+                SELECT t.category, jsonb_agg(t.name ORDER BY t.name) AS tag_names
+                FROM ${tagsToImagesTable} ti
+                JOIN ${tagsTable} t ON t.id = ti.tag_id
+                WHERE ti.image_id = ${imagesTable.id}
+                GROUP BY t.category
+              ) s
+            ), '{}'::jsonb)
+          `.mapWith((v) => v as Record<TagsCategory, string[]>),
+        })
+        .from(imagesTable)
+        .where(inArray(imagesTable.id, missingIds))
+    }
+
+    const inCache = imagesIds
+      .filter((id) => !missingIds.includes(id))
+      .map((id) => this.lruCacheImages.get<ImageResponse>(id)!)
+
+    for (const image of addImages)
+      this.lruCacheImages.set(image.id, image)
+
+    return [ ...inCache, ...addImages ]
   }
 
   /*
@@ -262,7 +366,7 @@ export class ImagesService {
     if (!image)
       return
 
-    const buffer = this.lruCache.get<Buffer>(imageId) ?? await this.r2Service.download(image.storageKey!)
+    const buffer = this.lruCacheImageBuffers.get<Buffer>(imageId) ?? await this.r2Service.download(image.storageKey!)
 
     if (!buffer)
       return
@@ -289,7 +393,7 @@ export class ImagesService {
     if (!image)
       return
 
-    const buffer = this.lruCache.get<Buffer>(imageId) ?? await this.r2Service.download(image.storageKey!)
+    const buffer = this.lruCacheImageBuffers.get<Buffer>(imageId) ?? await this.r2Service.download(image.storageKey!)
 
     if (!buffer)
       return
