@@ -1,8 +1,8 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
---> statement-breakpoint
+
 CREATE TABLE "characters" (
 	"id" text PRIMARY KEY NOT NULL,
-	"tag_id" text NOT NULL,
+	"tag_id" integer,
 	"display_name" text NOT NULL,
 	"image_id" text
 );
@@ -26,7 +26,6 @@ CREATE TABLE "images" (
 	"height" integer,
 	"file_size" integer,
 	"source_type" "source_type" NOT NULL,
-	"tags" text[] DEFAULT '{}' NOT NULL,
 	"upload_status" "upload_status" NOT NULL,
 	"error_message" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
@@ -60,6 +59,38 @@ CREATE TABLE "series" (
 	"cover_image_id" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "tags" (
+	"id" integer GENERATED ALWAYS AS IDENTITY (sequence name "tags_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"name" text NOT NULL,
+	"category" text,
+	"color_override" text,
+	"usage_count" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "tags_name_unique" UNIQUE("name")
+);
+--> statement-breakpoint
+CREATE TABLE "tags_to_images" (
+	"tag_id" integer NOT NULL,
+	"image_id" text NOT NULL,
+	CONSTRAINT "tags_to_images_unique" UNIQUE("tag_id","image_id")
+);
+--> statement-breakpoint
+CREATE TABLE "task_queue" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"data" jsonb NOT NULL,
+	"state" "task_state" NOT NULL,
+	"retry_limit" integer DEFAULT 0 NOT NULL,
+	"retry_count" integer DEFAULT 0 NOT NULL,
+	"retry_delay" integer DEFAULT 0 NOT NULL,
+	"start_after" timestamp DEFAULT now() NOT NULL,
+	"started_on" timestamp,
+	"singleton_key" text,
+	"expire_in" interval DEFAULT '15 minutes' NOT NULL,
+	"completed_on" timestamp,
+	"keep_until" timestamp DEFAULT '2026-06-10 19:23:23.155',
+	CONSTRAINT "task_queue_singleton_key_unique" UNIQUE("singleton_key")
 );
 --> statement-breakpoint
 CREATE TABLE "account" (
@@ -112,6 +143,7 @@ CREATE TABLE "user" (
 	"image" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"permissions" integer,
 	CONSTRAINT "user_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
@@ -124,6 +156,7 @@ CREATE TABLE "verification" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "characters" ADD CONSTRAINT "characters_tag_id_tags_id_fk" FOREIGN KEY ("tag_id") REFERENCES "public"."tags"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "characters" ADD CONSTRAINT "characters_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "episodes" ADD CONSTRAINT "episodes_season_id_seasons_id_fk" FOREIGN KEY ("season_id") REFERENCES "public"."seasons"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "images" ADD CONSTRAINT "images_author_id_user_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -131,6 +164,8 @@ ALTER TABLE "screenshots" ADD CONSTRAINT "screenshots_episode_id_episodes_id_fk"
 ALTER TABLE "screenshots" ADD CONSTRAINT "screenshots_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "seasons" ADD CONSTRAINT "seasons_series_id_series_id_fk" FOREIGN KEY ("series_id") REFERENCES "public"."series"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "series" ADD CONSTRAINT "series_cover_image_id_images_id_fk" FOREIGN KEY ("cover_image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tags_to_images" ADD CONSTRAINT "tags_to_images_tag_id_tags_id_fk" FOREIGN KEY ("tag_id") REFERENCES "public"."tags"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tags_to_images" ADD CONSTRAINT "tags_to_images_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "passkey" ADD CONSTRAINT "passkey_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -140,12 +175,12 @@ CREATE INDEX "episodes_season_id_idx" ON "episodes" USING btree ("season_id");--
 CREATE INDEX "images_author_id_idx" ON "images" USING btree ("author_id");--> statement-breakpoint
 CREATE INDEX "images_status_idx" ON "images" USING btree ("upload_status");--> statement-breakpoint
 CREATE INDEX "images_source_type_idx" ON "images" USING btree ("source_type");--> statement-breakpoint
-CREATE INDEX "images_tags_idx" ON "images" USING gin ("tags");--> statement-breakpoint
 CREATE INDEX "screenshots_episode_id_idx" ON "screenshots" USING btree ("episode_id");--> statement-breakpoint
 CREATE INDEX "screenshots_image_id_idx" ON "screenshots" USING btree ("image_id");--> statement-breakpoint
 CREATE INDEX "seasons_series_id_idx" ON "seasons" USING btree ("series_id");--> statement-breakpoint
 CREATE INDEX "series_title_rus_idx" ON "series" USING btree ("title_rus");--> statement-breakpoint
 CREATE INDEX "series_title_eng_idx" ON "series" USING btree ("title_eng");--> statement-breakpoint
+CREATE INDEX "tags_to_images_tag_id_idx" ON "tags_to_images" USING btree ("tag_id");--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "passkey_userId_idx" ON "passkey" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "passkey_credentialID_idx" ON "passkey" USING btree ("credential_id");--> statement-breakpoint
