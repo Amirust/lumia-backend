@@ -1,5 +1,5 @@
 {
-  "id": "3f790f81-6aa2-47e4-a030-36bd97aca936",
+  "id": "88cf0d64-6d12-4273-82ef-cac98d2630c0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -644,7 +644,7 @@
         "id": {
           "name": "id",
           "type": "integer",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true,
           "identity": {
             "type": "always",
@@ -864,7 +864,7 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false,
-          "default": "'2026-06-10 19:23:23.155'"
+          "default": "'2026-06-10 19:44:47.268'"
         }
       },
       "indexes": {},
@@ -1369,7 +1369,39 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.source_type": {
+      "name": "source_type",
+      "schema": "public",
+      "values": [
+        "fanart",
+        "screenshot"
+      ]
+    },
+    "public.task_state": {
+      "name": "task_state",
+      "schema": "public",
+      "values": [
+        "created",
+        "active",
+        "completed",
+        "cancelled",
+        "failed",
+        "retry"
+      ]
+    },
+    "public.upload_status": {
+      "name": "upload_status",
+      "schema": "public",
+      "values": [
+        "uploading",
+        "pending",
+        "indexing",
+        "done",
+        "failed"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},

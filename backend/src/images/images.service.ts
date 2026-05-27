@@ -31,6 +31,7 @@ import { JobHandler } from '@app/task-queue/decorators/job.decorator'
 import { TagsCategory } from '@app/ml-client/ml-client.types'
 import { EventsService } from '@app/events'
 import { EventKey, EventType } from '@app/events/events.types'
+import { CharactersService } from '../characters/characters.service'
 
 interface UploadImageOptions {
   episodeId?: string;
@@ -77,6 +78,7 @@ export class ImagesService {
     @Inject(DB_CONNECTION)
     private readonly db: DrizzleDB,
     private readonly usersService: UsersService,
+    private readonly charactersService: CharactersService,
     private readonly r2Service: R2Service,
     private readonly mlService: MlClientService,
     private readonly taskQueue: TaskQueueService,
@@ -434,6 +436,19 @@ export class ImagesService {
         status: ImageStatus.Done,
       })
       .where(eq(imagesTable.id, imageId))
+
+    if (tags.character?.length) {
+      const tagsToResolve = new Set([ ...tags.character ])
+
+      const resolvedIds = await this.resolveTagsIds([ ...tagsToResolve.values() ])
+
+      await this.charactersService.createIfTagNotExistsBulk(
+        resolvedIds.map(({ id }) => ({
+          tagId: id,
+          imageId,
+        })),
+      )
+    }
 
     this.events.emit(EventKey.AiTagsResolved(imageId), {
       type: EventType.AiTagsResolved,

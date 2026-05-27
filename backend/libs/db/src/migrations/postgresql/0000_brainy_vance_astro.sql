@@ -1,5 +1,8 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
+CREATE TYPE "public"."source_type" AS ENUM('fanart', 'screenshot');--> statement-breakpoint
+CREATE TYPE "public"."task_state" AS ENUM('created', 'active', 'completed', 'cancelled', 'failed', 'retry');--> statement-breakpoint
+CREATE TYPE "public"."upload_status" AS ENUM('uploading', 'pending', 'indexing', 'done', 'failed');--> statement-breakpoint
 CREATE TABLE "characters" (
 	"id" text PRIMARY KEY NOT NULL,
 	"tag_id" integer,
@@ -62,7 +65,7 @@ CREATE TABLE "series" (
 );
 --> statement-breakpoint
 CREATE TABLE "tags" (
-	"id" integer GENERATED ALWAYS AS IDENTITY (sequence name "tags_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "tags_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
 	"name" text NOT NULL,
 	"category" text,
 	"color_override" text,
@@ -89,7 +92,7 @@ CREATE TABLE "task_queue" (
 	"singleton_key" text,
 	"expire_in" interval DEFAULT '15 minutes' NOT NULL,
 	"completed_on" timestamp,
-	"keep_until" timestamp DEFAULT '2026-06-10 19:23:23.155',
+	"keep_until" timestamp DEFAULT '2026-06-10 19:44:47.268',
 	CONSTRAINT "task_queue_singleton_key_unique" UNIQUE("singleton_key")
 );
 --> statement-breakpoint

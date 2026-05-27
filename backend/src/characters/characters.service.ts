@@ -41,18 +41,35 @@ export class CharactersService {
       .limit(limit)
   }
 
-  async createIfTagNotExists(tag: string, imageId: string) {
+  async createIfTagNotExists(tagId: number, imageId?: string, name?: string) {
     const [ data ] = await this.db
       .insert(charactersTable)
       .values({
         id: snowflake(),
-        tagId: tag,
-        displayName: tag,
+        tagId,
+        displayName: name ?? `Character ${tagId}`,
         coverImageId: imageId,
       })
       .onConflictDoNothing()
       .returning()
 
     return !!data
+  }
+
+  async createIfTagNotExistsBulk(characters: { tagId: number, imageId: string }[]) {
+    const createdCharacters = await this.db
+      .insert(charactersTable)
+      .values(
+        characters.map(c => ({
+          id: snowflake(),
+          tagId: c.tagId,
+          displayName: `Character ${c.tagId}`,
+          coverImageId: c.imageId,
+        }))
+      )
+      .onConflictDoNothing()
+      .returning()
+
+    return createdCharacters.length
   }
 }

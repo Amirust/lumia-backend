@@ -7,10 +7,10 @@ export * from '@app/better-auth/auth.schema'
 
 /* --- ENUMS --- */
 
-const sourceTypeEnum = pgEnum('source_type', [ 'fanart', 'screenshot' ])
-const uploadStatusEnum = pgEnum('upload_status', [ 'uploading', 'pending', 'indexing', 'done', 'failed' ])
+export const sourceTypeEnum = pgEnum('source_type', [ 'fanart', 'screenshot' ])
+export const uploadStatusEnum = pgEnum('upload_status', [ 'uploading', 'pending', 'indexing', 'done', 'failed' ])
 
-const taskStateEnum = pgEnum('task_state', [ 'created', 'active', 'completed', 'cancelled', 'failed', 'retry' ])
+export const taskStateEnum = pgEnum('task_state', [ 'created', 'active', 'completed', 'cancelled', 'failed', 'retry' ])
 
 /* --- TABLES --- */
 
@@ -125,7 +125,7 @@ export const screenshotsTable = pgTable('screenshots', {
 ])
 
 export const tagsTable = pgTable('tags', {
-  id: integer('id').generatedAlwaysAsIdentity(),
+  id: integer('id').generatedAlwaysAsIdentity().primaryKey(),
 
   name: text('name').notNull(),
   category: text('category'),

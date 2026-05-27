@@ -95,7 +95,7 @@ export class TaskQueueWorker implements OnApplicationBootstrap, OnModuleDestroy 
     await this.db
       .update(taskQueueTable)
       .set({
-        state: sql`CASE WHEN ${taskQueueTable.retryCount} < ${taskQueueTable.retryLimit} THEN ${TaskState.Retry} ELSE ${TaskState.Failed} END`,
+        state: sql`(CASE WHEN ${taskQueueTable.retryCount} < ${taskQueueTable.retryLimit} THEN ${TaskState.Retry} ELSE ${TaskState.Failed} END)::task_state`,
         startedOn: null,
       })
       .where(
