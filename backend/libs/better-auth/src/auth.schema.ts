@@ -19,7 +19,8 @@ export const user = pgTable('user', {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
-  permissions: integer('permissions'),
+  permissions: integer('permissions').notNull(),
+  username: text('username'),
 })
 
 export const session = pgTable(

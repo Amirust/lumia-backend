@@ -1,4 +1,4 @@
-import { index, integer, interval, jsonb, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core'
+import { date, index, integer, interval, jsonb, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core'
 import { user } from '@app/better-auth/auth.schema'
 import { sql } from 'drizzle-orm'
 import { TimeUnit } from '@app/types/time-unit.enum'
@@ -11,6 +11,8 @@ export const sourceTypeEnum = pgEnum('source_type', [ 'fanart', 'screenshot' ])
 export const uploadStatusEnum = pgEnum('upload_status', [ 'uploading', 'pending', 'indexing', 'done', 'failed' ])
 
 export const taskStateEnum = pgEnum('task_state', [ 'created', 'active', 'completed', 'cancelled', 'failed', 'retry' ])
+
+export const animeStatusEnum = pgEnum('anime_status', [ 'anons', 'ongoing', 'released' ])
 
 /* --- TABLES --- */
 
@@ -65,6 +67,8 @@ export const seriesTable = pgTable('series', {
   titleEng: text('title_eng'),
   titleJap: text('title_jap'),
 
+  rating: text('rating'),
+
   coverImageId: text('cover_image_id').references(() => imagesTable.id),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -84,13 +88,24 @@ export const seasonsTable = pgTable('seasons', {
   number: integer('number').notNull(),
   title: text('title'),
 
+  shikimoriId: integer('shikimori_id'),
+
+  status: animeStatusEnum('status'),
+  episodesCount: integer('episodes_count'),
+  episodesAired: integer('episodes_aired'),
+
+  airedOn: date('aired_on'),
+  releasedOn: date('released_on'),
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at')
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
 }, (t) => [
-  index('seasons_series_id_idx').on(t.seriesId)
+  index('seasons_series_id_idx').on(t.seriesId),
+  unique('seasons_shikimori_id_unique').on(t.shikimoriId),
+  index('seasons_shikimori_id_idx').on(t.shikimoriId),
 ])
 
 export const episodesTable = pgTable('episodes', {
@@ -171,7 +186,8 @@ export const taskQueueTable = pgTable('task_queue', {
   expireIn: interval('expire_in').notNull().default('15 minutes'),
 
   completedOn: timestamp('completed_on'),
-  keepUntil: timestamp('keep_until').default(new Date(Date.now() + (TimeUnit.Day * 14))),
+  keepUntil: timestamp('keep_until')
+    .default(sql`(now() + interval '14 days')`),
 }, (t) => [
   unique('task_queue_singleton_key_unique').on(t.singletonKey),
 ])

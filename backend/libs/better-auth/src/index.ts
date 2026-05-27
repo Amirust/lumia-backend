@@ -4,9 +4,16 @@ import { passkey } from '@better-auth/passkey'
 
 export const getBasicConfig = () => ({
   emailAndPassword: {
-    enabled: true,
+    enabled: false,
   },
+
   plugins: [ passkey() ],
+
+  mapProfileToUser: (profile) => {
+    return {
+      username: profile.username,
+    }
+  },
 
   // Schema changes
   user: {
@@ -15,7 +22,11 @@ export const getBasicConfig = () => ({
         type: 'number' as any,
         required: true,
         default: 0
-      }
+      },
+      username: {
+        type: 'string' as any,
+        input: false
+      },
     }
   },
 })

@@ -3,4 +3,14 @@ export enum ErrorCode {
 
   UserNotFound = 1001,
   NotEnoughPermissions,
+
+  SeriesNotFound = 2001,
+  SeasonNotFound,
+  EpisodeNotFound,
+  SeriesHasSeasons,
+  SeasonHasEpisodes,
+  InvalidShikimoriUrl,
+  ShikimoriAnimeNotFound,
+  ShikimoriRequestFailed,
+  ShikimoriAlreadyImported,
 }
