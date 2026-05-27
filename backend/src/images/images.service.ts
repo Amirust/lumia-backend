@@ -1,10 +1,15 @@
 import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
 import {
+  EpisodeRecord,
   episodesTable,
   ImageRecord,
   imagesTable,
   screenshotsTable,
+  SeasonRecord,
+  seasonsTable,
+  SeriesRecord,
+  seriesTable,
   tagsTable,
   tagsToImagesTable,
 } from '@app/db/db.schema'
@@ -27,20 +32,38 @@ import { TagsCategory } from '@app/ml-client/ml-client.types'
 import { EventsService } from '@app/events'
 import { EventKey, EventType } from '@app/events/events.types'
 
+interface UploadImageOptions {
+  episodeId?: string;
+
+  timestampSeconds?: number;
+}
+
 interface FindManyOptions {
   tags?: string[];
   excludeTags?: string[];
 
   authorId?: string;
 
+  seriesId?: string;
   seasonId?: string;
   episodeId?: string;
+
+  sourceType?: ImageSourceType;
+}
+
+interface TagWithColor {
+  tag: string;
+  color?: string;
 }
 
 interface ImageResponse extends ImageRecord {
   tagsByCategory: {
-    [category in TagsCategory]?: string[];
-  };
+    [category in TagsCategory]?: TagWithColor[]
+  }
+
+  series?: SeriesRecord | null
+  season?: SeasonRecord | null
+  episode?: EpisodeRecord | null
 }
 
 @Injectable()
@@ -61,9 +84,9 @@ export class ImagesService {
   ) {}
 
   async findOne(id: string) {
-    const [ data ] = await this.db.select().from(imagesTable).where(eq(imagesTable.id, id))
+    const data = await this.resolveImages([ id ])
 
-    return data
+    return data.length ? data[0] : null
   }
 
   async findMany(limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
@@ -81,8 +104,12 @@ export class ImagesService {
     }
   }
 
-  async uploadFiles(files: ArrayBuffer[], authorId: string, source: ImageSourceType) {
-    const hashes = await Promise.all(files.map((buffer) => sha256(buffer)))
+  async uploadFiles(
+    files: { buffer: ArrayBuffer, options: UploadImageOptions }[],
+    authorId: string,
+    source: ImageSourceType
+  ) {
+    const hashes = await Promise.all(files.map((file) => sha256(file.buffer)))
 
     const duplicates = await this.db
       .select({
@@ -101,48 +128,55 @@ export class ImagesService {
           authorId,
           storageKey: getStorageKey(hash, authorId),
 
-          ...getFileMetaFromBuffer(file, hash, source),
+          ...getFileMetaFromBuffer(file.buffer, hash, source),
         },
-        buffer: file,
+        file: file,
       }))
 
     /*
      * Uploading and inserting in DB
      */
     const uploaded = await Promise.all(
-      filesWithMeta.map(async (file) => {
+      filesWithMeta.map(async (data) => {
         const inserted = await this.db
           .insert(imagesTable)
           .values({
-            ...file.meta,
+            ...data.meta,
             status: ImageStatus.Uploading,
           })
           .onConflictDoNothing()
           .returning()
 
         if (!inserted.length) {
-          this.logger.warn(`File with hash ${file.meta.contentHash} already exists, skipping upload`)
+          this.logger.warn(`File with hash ${data.meta.contentHash} already exists, skipping upload`)
           return null
         }
 
-        const buffer = Buffer.from(file.buffer, 0, file.buffer.byteLength)
+        const buffer = Buffer.from(data.file.buffer, 0, data.file.buffer.byteLength)
 
-        await this.r2Service.upload(file.meta.storageKey, buffer, file.meta.mime)
+        await this.r2Service.upload(data.meta.storageKey, buffer, data.meta.mime)
 
         await this.db
           .update(imagesTable)
           .set({
             status: ImageStatus.Pending,
           })
-          .where(eq(imagesTable.id, file.meta.id))
+          .where(eq(imagesTable.id, data.meta.id))
 
-        this.lruCacheImageBuffers.set(file.meta.id, buffer)
+        const options = data.file.options
+        if (options.episodeId && options.timestampSeconds != null)
+          await this.db.insert(screenshotsTable).values({
+            id: snowflake(),
+            imageId: data.meta.id,
+            episodeId: options.episodeId,
+            timestampSeconds: options.timestampSeconds,
+          })
+
+        this.lruCacheImageBuffers.set(data.meta.id, buffer)
 
         return inserted[0]
       }),
     )
-
-    // todo: sse streaming to send new tags after ai to frontend
 
     for (const image of uploaded.filter((i) => !!i)) {
       await this.taskQueue.send(TaskType.GetTags, { imageId: image.id }, { singletonKey: `get-tags-${image.id}` })
@@ -284,6 +318,8 @@ export class ImagesService {
 
           options.authorId ? eq(imagesTable.authorId, options.authorId) : undefined,
 
+          options.sourceType ? eq(imagesTable.sourceType, options.sourceType) : undefined,
+
           options.episodeId
             ? exists(
               this.db
@@ -330,21 +366,36 @@ export class ImagesService {
       addImages = await this.db
         .select({
           ...getTableColumns(imagesTable),
-          tagsByCategory: sql<Record<string, string[]>>`
+
+          series: seriesTable,
+          season: seasonsTable,
+          episode: episodesTable,
+
+          tagsByCategory: sql<Record<string, TagWithColor[]>>`
             COALESCE((
-              SELECT jsonb_object_agg(category, tag_names)
+              SELECT jsonb_object_agg(category, tags)
               FROM (
-                SELECT t.category, jsonb_agg(t.name ORDER BY t.name) AS tag_names
+                SELECT t.category, jsonb_agg(
+                  jsonb_strip_nulls(jsonb_build_object('tag', t.name, 'color', t.color_override))
+                  ORDER BY t.name
+                ) AS tags
                 FROM ${tagsToImagesTable} ti
                 JOIN ${tagsTable} t ON t.id = ti.tag_id
                 WHERE ti.image_id = ${imagesTable.id}
                 GROUP BY t.category
               ) s
             ), '{}'::jsonb)
-          `.mapWith((v) => v as Record<TagsCategory, string[]>),
+          `.mapWith((v) => v as Record<TagsCategory, TagWithColor[]>),
         })
         .from(imagesTable)
         .where(inArray(imagesTable.id, missingIds))
+        .leftJoin(screenshotsTable, and(
+          eq(imagesTable.sourceType, ImageSourceType.Screenshot),
+          eq(screenshotsTable.imageId, imagesTable.id),
+        ))
+        .leftJoin(episodesTable, eq(episodesTable.id, screenshotsTable.episodeId))
+        .leftJoin(seasonsTable, eq(seasonsTable.id, episodesTable.seasonId))
+        .leftJoin(seriesTable, eq(seriesTable.id, seasonsTable.seriesId))
     }
 
     const inCache = imagesIds

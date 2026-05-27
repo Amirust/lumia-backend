@@ -47,7 +47,9 @@ export const imagesTable = pgTable('images', {
 
 export const charactersTable = pgTable('characters', {
   id: text('id').primaryKey(),
-  tagId: text('tag_id').notNull(),
+
+  tagId: integer('tag_id').references(() => tagsTable.id),
+
   displayName: text('display_name').notNull(),
   coverImageId: text('image_id').references(() => imagesTable.id),
 }, (t) => [
@@ -128,6 +130,8 @@ export const tagsTable = pgTable('tags', {
   name: text('name').notNull(),
   category: text('category'),
 
+  colorOverride: text('color_override'),
+
   usageCount: integer('usage_count').default(0).notNull(),
 }, (t) => [
   unique('tags_name_unique').on(t.name),
@@ -174,3 +178,6 @@ export const taskQueueTable = pgTable('task_queue', {
 
 export type QueueTask = typeof taskQueueTable.$inferSelect;
 export type ImageRecord = typeof imagesTable.$inferSelect;
+export type SeriesRecord = typeof seriesTable.$inferSelect;
+export type SeasonRecord = typeof seasonsTable.$inferSelect;
+export type EpisodeRecord = typeof episodesTable.$inferSelect;
