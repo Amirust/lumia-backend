@@ -24,7 +24,7 @@ export const ApiOkResponseWrapped = <TModel extends Type<unknown>>(
           { $ref: getSchemaPath(Response) },
           {
             properties: {
-              ok: { type: 'boolean', enum: [true] },
+              ok: { type: 'boolean', enum: [ true ] },
               result: resultSchema,
               errors: { type: 'array', items: { type: 'object' }, nullable: true },
             },

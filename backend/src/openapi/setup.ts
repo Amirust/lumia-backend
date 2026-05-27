@@ -17,7 +17,7 @@ export async function setupOpenApi(app: INestApplication): Promise<void> {
 
   const document = cleanupOpenApiDoc(
     SwaggerModule.createDocument(app, config, {
-      extraModels: [Response, ResponseError],
+      extraModels: [ Response, ResponseError ],
     }),
   )
 
