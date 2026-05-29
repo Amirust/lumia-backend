@@ -19,6 +19,7 @@ import { AnimeModule } from './anime/anime.module'
 import { CharactersModule } from './characters/characters.module'
 import { TagsService } from './tags/tags.service'
 import { TagsModule } from './tags/tags.module'
+import { PermissionGuard } from './common/permission.guard'
 
 @Module({
   imports: [
@@ -32,21 +33,21 @@ import { TagsModule } from './tags/tags.module'
       imports: [ DbModule ],
       inject: [ ConfigService, DB_CONNECTION ],
       useFactory: (config: ConfigService, db: NodePgDatabase)=> ({
-        ...getBasicConfig(),
-        socialProviders: {
-          discord: {
-            clientId: config.getOrThrow('DISCORD_CLIENT_ID'),
-            clientSecret: config.getOrThrow('DISCORD_CLIENT_SECRET'),
-            mapProfileToUser: (profile) => {
-              return {
-                name: profile.global_name ?? profile.username,
-                username: profile.username,
-                image: profile.image_url,
-              }
+        auth: betterAuth({
+          ...getBasicConfig(),
+          socialProviders: {
+            discord: {
+              clientId: config.getOrThrow('DISCORD_CLIENT_ID'),
+              clientSecret: config.getOrThrow('DISCORD_CLIENT_SECRET'),
+              mapProfileToUser: (profile) => {
+                return {
+                  name: profile.global_name ?? profile.username,
+                  username: profile.username,
+                  image: profile.image_url,
+                }
+              },
             },
           },
-        },
-        auth: betterAuth({
           database: drizzleAdapter(db, {
             provider: 'pg'
           }),
@@ -74,6 +75,10 @@ import { TagsModule } from './tags/tags.module'
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionGuard,
     },
     {
       provide: APP_PIPE,

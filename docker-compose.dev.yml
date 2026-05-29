@@ -2,6 +2,7 @@ version: '3'
 
 volumes:
   postgres:
+  seaweedfs:
 
 services:
   postgres:
@@ -13,3 +14,16 @@ services:
       - .env
     ports:
       - "5432:5432"
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    restart: unless-stopped
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -ip=0.0.0.0
+    volumes:
+      - seaweedfs:/data
+      - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    ports:
+      - "8080:8080"   # HTTP UI
+      - "8333:8333"   # S3 API
+      - "8888:8888"   # filer
+      - "9333:9333"   # master UI

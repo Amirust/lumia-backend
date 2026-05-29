@@ -6,8 +6,8 @@ const episode = z.object({
   seasonId: z.string(),
   number: z.number().int(),
   title: z.string().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 })
 
 export default class EpisodeResponseDto extends createZodDto(episode) {}

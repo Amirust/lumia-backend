@@ -21,7 +21,7 @@ export class MlClientService implements OnModuleInit {
       : file
 
     const formData = new FormData()
-    formData.append('file', new Blob([ part ]), ML_BODY_FILE_NAME)
+    formData.append('image', new Blob([ part ]), ML_BODY_FILE_NAME)
 
     const response = await this.callApi(MlClientEndpoint.GetTags, formData)
     if (!response.ok)
@@ -36,7 +36,7 @@ export class MlClientService implements OnModuleInit {
       : file
 
     const formData = new FormData()
-    formData.append('file', new Blob([ part ]), ML_BODY_FILE_NAME)
+    formData.append('image', new Blob([ part ]), ML_BODY_FILE_NAME)
 
     const response = await this.callApi(MlClientEndpoint.GetThumbnail, formData)
     if (!response.ok)
@@ -49,17 +49,18 @@ export class MlClientService implements OnModuleInit {
     if (!this.token || !this.apiUrl)
       throw new Error('ML API token or URL not configured')
 
+    const isFormData = body instanceof FormData
+
     return fetch(`${slashEnded(this.apiUrl)}${endpoint}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.token}`,
-        'Content-Type': body instanceof FormData ?
-          'multipart/form-data' :
-          'application/json',
+        ...(isFormData ?
+          {} :
+          { 'Content-Type': 'application/json' }
+        ),
       },
-      body: body instanceof FormData ?
-        body :
-        JSON.stringify(body),
+      body: isFormData ? body : JSON.stringify(body),
     })
   }
 }

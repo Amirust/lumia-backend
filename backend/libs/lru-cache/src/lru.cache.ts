@@ -59,6 +59,10 @@ export class LruCache {
     return !!item && item.exp > Date.now()
   }
 
+  delete(key: string): void {
+    this.cache.delete(key)
+  }
+
   getCurrentSize(): number {
     return [ ...this.cache.values() ].reduce((acc, item) => {
       return acc + this.getSizeOf(item)

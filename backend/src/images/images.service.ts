@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common'
+import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
 import {
   EpisodeRecord,
@@ -41,6 +41,15 @@ interface UploadImageOptions {
   timestampSeconds?: number;
 }
 
+type PreparedUpload = {
+  meta: ReturnType<typeof getFileMetaFromBuffer> & {
+    id: string
+    authorId: string
+    storageKey: string
+  }
+  file: { buffer: ArrayBuffer; options: UploadImageOptions }
+}
+
 interface FindManyOptions {
   tags?: string[];
   excludeTags?: string[];
@@ -59,7 +68,7 @@ interface TagWithColor {
   color?: string;
 }
 
-interface ImageResponse extends ImageRecord {
+export interface ImageResponse extends ImageRecord {
   tagsByCategory: {
     [category in TagsCategory]?: TagWithColor[]
   }
@@ -114,6 +123,9 @@ export class ImagesService {
     authorId: string,
     source: ImageSourceType
   ) {
+    if (!(await this.usersService.hasPermission(authorId, UserPermission.UploadImages)))
+      throw new ForbiddenException({ code: ErrorCode.NotEnoughPermissions })
+
     const hashes = await Promise.all(files.map((file) => sha256(file.buffer)))
 
     const duplicates = await this.db
@@ -142,48 +154,12 @@ export class ImagesService {
      * Uploading and inserting in DB
      */
     const uploaded = await Promise.all(
-      filesWithMeta.map(async (data) => {
-        const inserted = await this.db
-          .insert(imagesTable)
-          .values({
-            ...data.meta,
-            status: ImageStatus.Uploading,
-          })
-          .onConflictDoNothing()
-          .returning()
-
-        if (!inserted.length) {
-          this.logger.warn(`File with hash ${data.meta.contentHash} already exists, skipping upload`)
-          return null
-        }
-
-        const buffer = Buffer.from(data.file.buffer, 0, data.file.buffer.byteLength)
-
-        await this.r2Service.upload(data.meta.storageKey, buffer, data.meta.mime)
-
-        await this.db
-          .update(imagesTable)
-          .set({
-            status: ImageStatus.Pending,
-          })
-          .where(eq(imagesTable.id, data.meta.id))
-
-        const options = data.file.options
-        if (options.episodeId && options.timestampSeconds != null)
-          await this.db.insert(screenshotsTable).values({
-            id: snowflake(),
-            imageId: data.meta.id,
-            episodeId: options.episodeId,
-            timestampSeconds: options.timestampSeconds,
-          })
-
-        this.lruCacheImageBuffers.set(data.meta.id, buffer)
-
-        return inserted[0]
-      }),
+      filesWithMeta.map((data) => this.uploadSingleFile(data)),
     )
 
-    for (const image of uploaded.filter((i) => !!i)) {
+    const created = uploaded.filter((i): i is ImageRecord => !!i)
+
+    for (const image of created) {
       await this.taskQueue.send(TaskType.GetTags, { imageId: image.id }, { singletonKey: `get-tags-${image.id}` })
       await this.taskQueue.send(
         TaskType.GetWebpThumbnail,
@@ -191,6 +167,64 @@ export class ImagesService {
         { singletonKey: `get-webp-${image.id}` },
       )
     }
+
+    return created
+  }
+
+  async editTags(imageId: string, userId: string, changes: { add?: string[]; remove?: string[] }) {
+    const image = await this.findOne(imageId)
+
+    if (!image)
+      throw new NotFoundException({ code: ErrorCode.ImageNotFound })
+
+    if (image.authorId !== userId && !(await this.usersService.hasPermission(userId, UserPermission.EditOthersImageTags)))
+      throw new ForbiddenException({ code: ErrorCode.NotEnoughPermissions })
+
+    if (changes.add?.length) await this.tagsService.addTags(imageId, changes.add)
+    if (changes.remove?.length) await this.tagsService.removeTags(imageId, changes.remove)
+
+    this.lruCacheImages.delete(imageId)
+
+    return this.findOne(imageId)
+  }
+
+  async updateImage(imageId: string, userId: string, changes: { episodeId?: string | null; sourceType?: ImageSourceType }) {
+    const image = await this.findOne(imageId)
+
+    if (!image)
+      throw new NotFoundException({ code: ErrorCode.ImageNotFound })
+
+    if (
+      image.authorId !== userId &&
+      changes.sourceType === ImageSourceType.Screenshot &&
+      !(await this.usersService.hasPermission(userId, UserPermission.AssignOthersEpisodeScreenshots))
+    )
+      throw new ForbiddenException({ code: ErrorCode.NotEnoughPermissions })
+
+    if (changes.sourceType)
+      await this.db
+        .update(imagesTable)
+        .set({ sourceType: changes.sourceType })
+        .where(eq(imagesTable.id, imageId))
+
+    if (changes.episodeId === null)
+      await this.db
+        .delete(screenshotsTable)
+        .where(eq(screenshotsTable.imageId, imageId))
+
+    else if (changes.episodeId)
+      await this.db
+        .insert(screenshotsTable)
+        .values({
+          id: snowflake(),
+          imageId,
+          episodeId: changes.episodeId,
+        })
+        .onConflictDoNothing()
+
+    this.lruCacheImages.delete(imageId)
+
+    return this.findOne(imageId)
   }
 
   async getTotalCount() {
@@ -203,22 +237,100 @@ export class ImagesService {
     return count[0].estimate as number
   }
 
-  /*
-   * Permissions helpers
-   */
+  async deleteImage(imageId: string, userId: string) {
+    const image = await this.findOne(imageId)
 
-  async ensureUserCan(id: string, userId: string, permission: UserPermission) {
-    const image = await this.findOne(id)
+    if (!image)
+      throw new NotFoundException({ code: ErrorCode.ImageNotFound })
 
-    if (!image || !(image.authorId === userId) || !(await this.usersService.hasPermission(userId, permission)))
-      throw new ForbiddenException({
-        code: ErrorCode.NotEnoughPermissions,
-      })
+    if (
+      image.authorId !== userId &&
+      !(await this.usersService.hasPermission(userId, UserPermission.DeleteOthersImages))
+    )
+      throw new ForbiddenException({ code: ErrorCode.NotEnoughPermissions })
+
+    await this.db.transaction(async (tx) => {
+      const affectedTagIds = (
+        await tx
+          .select({ tagId: tagsToImagesTable.tagId })
+          .from(tagsToImagesTable)
+          .where(eq(tagsToImagesTable.imageId, imageId))
+      ).map((r) => r.tagId)
+
+      await tx.delete(imagesTable).where(eq(imagesTable.id, imageId))
+
+      await this.tagsService.recountTags(tx, affectedTagIds)
+    })
+
+    if (image.storageKey) {
+      await this.r2Service
+        .delete(image.storageKey)
+        .catch((e) => this.logger.error(`Failed to delete image ${imageId} from R2: ${e}`))
+
+      await this.r2Service
+        .delete(getStorageKeyThumbnail(image.contentHash, image.authorId))
+        .catch((e) => this.logger.error(`Failed to delete thumbnail for ${imageId} from R2: ${e}`))
+    }
+
+    this.lruCacheImages.delete(imageId)
+
+    return { ok: true }
   }
 
   /*
    * Internal methods
    */
+
+  private async uploadSingleFile(data: PreparedUpload): Promise<ImageRecord | null> {
+    const buffer = Buffer.from(data.file.buffer, 0, data.file.buffer.byteLength)
+    let r2Uploaded = false
+
+    try {
+      const image = await this.db.transaction(async (tx) => {
+        const inserted = await tx
+          .insert(imagesTable)
+          .values({
+            ...data.meta,
+            status: ImageStatus.Pending,
+          })
+          .onConflictDoNothing()
+          .returning()
+
+        if (!inserted.length) {
+          this.logger.warn(`File with hash ${data.meta.contentHash} already exists, skipping upload`)
+          return null
+        }
+
+        await this.r2Service.upload(data.meta.storageKey, buffer, data.meta.mime)
+        r2Uploaded = true
+
+        const options = data.file.options
+        if (options.episodeId && options.timestampSeconds != null)
+          await tx.insert(screenshotsTable).values({
+            id: snowflake(),
+            imageId: data.meta.id,
+            episodeId: options.episodeId,
+            timestampSeconds: options.timestampSeconds,
+          })
+
+        return inserted[0]
+      })
+
+      if (image) this.lruCacheImageBuffers.set(data.meta.id, buffer)
+
+      return image
+    } catch (error: unknown) {
+      if (r2Uploaded)
+        await this.r2Service
+          .delete(data.meta.storageKey)
+          .catch((e) => this.logger.error(`Failed to clean up R2 object ${data.meta.storageKey}: ${e}`))
+
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error(`Failed to upload image ${data.meta.id}: ${message}`)
+
+      return null
+    }
+  }
 
   private async findManyDeep(limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
     const tagsIds: number[] = []
@@ -309,6 +421,19 @@ export class ImagesService {
                 ),
             )
             : undefined,
+
+          options.seriesId
+            ? exists(
+              this.db
+                .select({ x: sql`1` })
+                .from(screenshotsTable)
+                .innerJoin(episodesTable, eq(episodesTable.id, screenshotsTable.episodeId))
+                .innerJoin(seasonsTable, eq(seasonsTable.id, episodesTable.seasonId))
+                .where(
+                  and(eq(screenshotsTable.imageId, imagesTable.id), eq(seasonsTable.seriesId, options.seriesId)),
+                ),
+            )
+            : undefined,
         ),
       )
       .orderBy(sql`${imagesTable.id}::bigint`)
@@ -376,7 +501,7 @@ export class ImagesService {
    */
 
   @JobHandler(TaskType.GetTags)
-  private async handleGetTags({ imageId }: { imageId: string }) {
+  private async handleGetTags({ data: { imageId } }: { data: { imageId: string } }) {
     const image = await this.findOne(imageId)
 
     if (!image) return
@@ -390,7 +515,10 @@ export class ImagesService {
       .map((value) => value[1])
       .flat()
 
-    await this.tagsService.addTags(imageId, tagsArray)
+    if (tagsArray.length)
+      await this.tagsService.addTags(imageId, tagsArray)
+    else
+      this.logger.warn('ML service returned no tags for image ' + imageId, tags)
 
     await this.db
       .update(imagesTable)
@@ -422,7 +550,7 @@ export class ImagesService {
   }
 
   @JobHandler(TaskType.GetWebpThumbnail)
-  private async handleGetWebpThumbnail({ imageId }: { imageId: string }) {
+  private async handleGetWebpThumbnail({ data: { imageId } }: { data: { imageId: string } }) {
     const image = await this.findOne(imageId)
 
     if (!image) return

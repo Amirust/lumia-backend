@@ -1,0 +1,1 @@
+ALTER TABLE "user" ALTER COLUMN "permissions" SET DEFAULT 1;

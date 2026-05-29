@@ -7,6 +7,8 @@ export enum UserPermission {
   AssignOthersEpisodeScreenshots = 1 << 2,
   DeleteOthersImages = 1 << 3,
 
+  ManageAnime = 1 << 4,
+
   Administrator = 1 << 30,
 }
 

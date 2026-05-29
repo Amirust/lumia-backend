@@ -17,6 +17,7 @@ export class R2Service implements OnModuleInit {
     this.s3Client = new S3Client({
       region: 'auto',
       endpoint: this.configService.getOrThrow('R2_ENDPOINT'),
+      forcePathStyle: true,
       credentials: {
         accessKeyId: this.configService.getOrThrow('R2_ACCESS_KEY_ID'),
         secretAccessKey: this.configService.getOrThrow('R2_SECRET_ACCESS_KEY'),

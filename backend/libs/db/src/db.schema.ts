@@ -1,7 +1,6 @@
 import { date, index, integer, interval, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique } from 'drizzle-orm/pg-core'
 import { user } from '@app/better-auth/auth.schema'
 import { sql } from 'drizzle-orm'
-import { TimeUnit } from '@app/types/time-unit.enum'
 import type { DrizzleDB } from '@app/db/index'
 
 export * from '@app/better-auth/auth.schema'
@@ -51,10 +50,10 @@ export const imagesTable = pgTable('images', {
 export const charactersTable = pgTable('characters', {
   id: text('id').primaryKey(),
 
-  tagId: integer('tag_id').references(() => tagsTable.id),
+  tagId: integer('tag_id').references(() => tagsTable.id, { onDelete: 'set null' }),
 
   displayName: text('display_name').notNull(),
-  coverImageId: text('image_id').references(() => imagesTable.id),
+  coverImageId: text('image_id').references(() => imagesTable.id, { onDelete: 'set null' }),
 }, (t) => [
   index('characters_tag_id_idx').on(t.tagId),
   index('characters_display_name_trgm_idx')
@@ -70,7 +69,7 @@ export const seriesTable = pgTable('series', {
 
   rating: text('rating'),
 
-  coverImageId: text('cover_image_id').references(() => imagesTable.id),
+  coverImageId: text('cover_image_id').references(() => imagesTable.id, { onDelete: 'set null' }),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at')
@@ -84,7 +83,7 @@ export const seriesTable = pgTable('series', {
 
 export const seasonsTable = pgTable('seasons', {
   id: text('id').primaryKey(),
-  seriesId: text('series_id').references(() => seriesTable.id).notNull(),
+  seriesId: text('series_id').references(() => seriesTable.id, { onDelete: 'cascade' }).notNull(),
 
   number: integer('number').notNull(),
   title: text('title'),
@@ -111,7 +110,7 @@ export const seasonsTable = pgTable('seasons', {
 
 export const episodesTable = pgTable('episodes', {
   id: text('id').primaryKey(),
-  seasonId: text('season_id').references(() => seasonsTable.id).notNull(),
+  seasonId: text('season_id').references(() => seasonsTable.id, { onDelete: 'cascade' }).notNull(),
 
   number: integer('number').notNull(),
   title: text('title'),
@@ -128,8 +127,8 @@ export const episodesTable = pgTable('episodes', {
 export const screenshotsTable = pgTable('screenshots', {
   id: text('id').primaryKey(),
 
-  episodeId: text('episode_id').references(() => episodesTable.id).notNull(),
-  imageId: text('image_id').references(() => imagesTable.id).notNull(),
+  episodeId: text('episode_id').references(() => episodesTable.id, { onDelete: 'cascade' }).notNull(),
+  imageId: text('image_id').references(() => imagesTable.id, { onDelete: 'cascade' }).notNull(),
 
   timestampSeconds: integer('timestamp_seconds'),
 

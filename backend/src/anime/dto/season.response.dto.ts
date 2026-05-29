@@ -14,8 +14,8 @@ const season = z.object({
   episodesAired: z.number().int().nullable(),
   airedOn: z.string().nullable(),
   releasedOn: z.string().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
 })
 
 export default class SeasonResponseDto extends createZodDto(season) {}

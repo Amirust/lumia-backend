@@ -17,7 +17,7 @@ export class UsersService {
     private readonly db: DrizzleDB,
   ) {}
 
-  async getUser(id: string) {
+  async getUser(id: string, options: { includePermissions?: boolean } = {}) {
     const [ data ] = await this.db
       .select({
         id: user.id,
@@ -28,6 +28,14 @@ export class UsersService {
       })
       .from(user)
       .where(eq(user.id, id))
+
+    if (!data) return data
+
+    if (!options.includePermissions) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { permissions, ...rest } = data
+      return rest
+    }
 
     return data
   }

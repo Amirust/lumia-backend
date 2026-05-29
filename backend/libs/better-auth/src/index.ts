@@ -1,21 +1,23 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { passkey } from '@better-auth/passkey'
+import { bearer } from 'better-auth/plugins'
+import { DefaultUserPermissions } from '@app/types/user.permissions'
 
 export const getBasicConfig = () => ({
   emailAndPassword: {
-    enabled: false,
+    enabled: true,
   },
 
-  plugins: [ passkey() ],
+  plugins: [ passkey(), bearer() ],
 
   // Schema changes
   user: {
     additionalFields: {
       permissions: {
         type: 'number' as any,
-        required: true,
-        default: 0
+        defaultValue: DefaultUserPermissions,
+        input: false
       },
       username: {
         type: 'string' as any,

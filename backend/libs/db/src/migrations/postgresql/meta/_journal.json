@@ -22,6 +22,34 @@
       "when": 1779919439481,
       "tag": "0002_plain_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780090035584,
+      "tag": "0003_overconfident_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780090132846,
+      "tag": "0004_third_arclight",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780095027907,
+      "tag": "0005_mighty_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780096395581,
+      "tag": "0006_sour_prima",
+      "breakpoints": true
     }
   ]
 }

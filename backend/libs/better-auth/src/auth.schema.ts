@@ -7,6 +7,7 @@ import {
   integer,
   index,
 } from 'drizzle-orm/pg-core'
+import { DefaultUserPermissions } from '@app/types/user.permissions'
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -19,7 +20,7 @@ export const user = pgTable('user', {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
-  permissions: integer('permissions').notNull(),
+  permissions: integer('permissions').default(DefaultUserPermissions).notNull(),
   username: text('username'),
 })
 

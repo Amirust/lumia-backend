@@ -13,4 +13,8 @@ export enum ErrorCode {
   ShikimoriAnimeNotFound,
   ShikimoriRequestFailed,
   ShikimoriAlreadyImported,
+
+  ImageNotFound = 3001,
+  NoFilesUploaded,
+  NotMultipart,
 }

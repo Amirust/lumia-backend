@@ -22,7 +22,7 @@ async fn main() {
         .route("/tags", post(tagger))
         .route("/thumbnail", post(thumbnail));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:80")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
         .unwrap();
 
