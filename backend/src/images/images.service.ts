@@ -3,6 +3,7 @@ import { DB_CONNECTION, type DrizzleDB } from '@app/db'
 import {
   EpisodeRecord,
   episodesTable,
+  imageTagIndexTable,
   ImageRecord,
   imagesTable,
   screenshotsTable,
@@ -13,7 +14,7 @@ import {
   tagsTable,
   tagsToImagesTable,
 } from '@app/db/db.schema'
-import { and, eq, exists, getTableColumns, inArray, notExists, sql } from 'drizzle-orm'
+import { and, arrayContains, arrayOverlaps, eq, exists, getTableColumns, inArray, notInArray, sql } from 'drizzle-orm'
 import { UsersService } from '../users/users.service'
 import { UserPermission } from '@app/types/user.permissions'
 import { ErrorCode } from '@app/types/error-code.enum'
@@ -32,6 +33,7 @@ import { TagsCategory } from '@app/ml-client/ml-client.types'
 import { EventsService } from '@app/events'
 import { EventKey, EventType } from '@app/events/events.types'
 import { CharactersService } from '../characters/characters.service'
+import { TagsService } from '../tags/tags.service'
 
 interface UploadImageOptions {
   episodeId?: string;
@@ -83,6 +85,7 @@ export class ImagesService {
     private readonly mlService: MlClientService,
     private readonly taskQueue: TaskQueueService,
     private readonly events: EventsService,
+    private readonly tagsService: TagsService,
   ) {}
 
   async findOne(id: string) {
@@ -190,42 +193,6 @@ export class ImagesService {
     }
   }
 
-  async addTags(id: string, toAdd: string[]) {
-    const ids = await this.resolveTagsIds(toAdd)
-
-    const [ updated ] = await this.db
-      .insert(tagsToImagesTable)
-      .values(
-        ids.map(({ id: tagId }) => ({
-          tagId,
-          imageId: id,
-        })),
-      )
-      .onConflictDoNothing()
-      .returning()
-
-    return updated
-  }
-
-  async removeTags(id: string, toRemove: string[]) {
-    const ids = await this.resolveTagsIds(toRemove)
-
-    const [ updated ] = await this.db
-      .delete(tagsToImagesTable)
-      .where(
-        and(
-          eq(tagsToImagesTable.imageId, id),
-          inArray(
-            tagsToImagesTable.tagId,
-            ids.map(({ id }) => id),
-          ),
-        ),
-      )
-      .returning()
-
-    return updated
-  }
-
   async getTotalCount() {
     const count = this.db.execute(
       sql<{ estimate: number }>`SELECT reltuples::bigint AS estimate
@@ -253,28 +220,26 @@ export class ImagesService {
    * Internal methods
    */
 
-  private async resolveTagsIds(tags: string[]) {
-    return this.db
-      .select({
-        id: tagsTable.id,
-      })
-      .from(tagsTable)
-      .where(inArray(tagsTable.name, tags))
-  }
-
   private async findManyDeep(limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
     const tagsIds: number[] = []
     const excludeTagsIds: number[] = []
 
     if (options.tags?.length || options.excludeTags?.length) {
-      const resolvedTags = options.tags ? await this.resolveTagsIds(options.tags) : []
-      const resolvedExcludeTags = options.excludeTags ? await this.resolveTagsIds(options.excludeTags) : []
+      const requestedTags = [ ...new Set(options.tags ?? []) ]
+      const requestedExcludeTags = [ ...new Set(options.excludeTags ?? []) ]
+
+      const resolvedTags = requestedTags.length ?
+        await this.tagsService.resolveTagsIds(requestedTags) :
+        []
+      const resolvedExcludeTags = requestedExcludeTags.length ?
+        await this.tagsService.resolveTagsIds(requestedExcludeTags) :
+        []
 
       // If some tags were not found, it means no images can be found, so we can return early
-      if ((options.tags?.length ?? 0) > resolvedTags.length) return { ids: [], afterFilter: 0 }
+      if (requestedTags.length > resolvedTags.length) return { ids: [], afterFilter: 0 }
 
-      tagsIds.push(...resolvedTags.map(({ id }) => id))
-      excludeTagsIds.push(...resolvedExcludeTags.map(({ id }) => id))
+      tagsIds.push(...new Set(resolvedTags.map(({ id }) => id)))
+      excludeTagsIds.push(...new Set(resolvedExcludeTags.map(({ id }) => id)))
     }
 
     const result = await this.db
@@ -293,26 +258,23 @@ export class ImagesService {
           lastSeenId ? sql`${imagesTable.id}::bigint > ${lastSeenId}::bigint` : undefined,
 
           // tags here
-          options.tags?.length
-            ? exists(
+          tagsIds.length
+            ? inArray(
+              imagesTable.id,
               this.db
-                .select({ x: sql`1` })
-                .from(tagsToImagesTable)
-                .where(and(eq(tagsToImagesTable.imageId, imagesTable.id), inArray(tagsToImagesTable.tagId, tagsIds))),
+                .select({ imageId: imageTagIndexTable.imageId })
+                .from(imageTagIndexTable)
+                .where(arrayContains(imageTagIndexTable.tagIds, tagsIds)),
             )
             : undefined,
 
-          options.excludeTags?.length
-            ? notExists(
+          excludeTagsIds.length
+            ? notInArray(
+              imagesTable.id,
               this.db
-                .select({ x: sql`1` })
-                .from(tagsToImagesTable)
-                .where(
-                  and(
-                    eq(tagsToImagesTable.imageId, imagesTable.id),
-                    inArray(tagsToImagesTable.tagId, excludeTagsIds),
-                  ),
-                ),
+                .select({ imageId: imageTagIndexTable.imageId })
+                .from(imageTagIndexTable)
+                .where(arrayOverlaps(imageTagIndexTable.tagIds, excludeTagsIds)),
             )
             : undefined,
 
@@ -428,7 +390,7 @@ export class ImagesService {
       .map((value) => value[1])
       .flat()
 
-    await this.addTags(imageId, tagsArray)
+    await this.tagsService.addTags(imageId, tagsArray)
 
     await this.db
       .update(imagesTable)
@@ -440,7 +402,7 @@ export class ImagesService {
     if (tags.character?.length) {
       const tagsToResolve = new Set([ ...tags.character ])
 
-      const resolvedIds = await this.resolveTagsIds([ ...tagsToResolve.values() ])
+      const resolvedIds = await this.tagsService.resolveTagsIds([ ...tagsToResolve.values() ])
 
       await this.charactersService.createIfTagNotExistsBulk(
         resolvedIds.map(({ id }) => ({

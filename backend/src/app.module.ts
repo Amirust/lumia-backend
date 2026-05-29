@@ -17,6 +17,8 @@ import { UsersModule } from './users/users.module'
 import { GalleryModule } from './gallery/gallery.module'
 import { AnimeModule } from './anime/anime.module'
 import { CharactersModule } from './characters/characters.module'
+import { TagsService } from './tags/tags.service'
+import { TagsModule } from './tags/tags.module'
 
 @Module({
   imports: [
@@ -34,7 +36,14 @@ import { CharactersModule } from './characters/characters.module'
         socialProviders: {
           discord: {
             clientId: config.getOrThrow('DISCORD_CLIENT_ID'),
-            clientSecret: config.getOrThrow('DISCORD_CLIENT_SECRET')
+            clientSecret: config.getOrThrow('DISCORD_CLIENT_SECRET'),
+            mapProfileToUser: (profile) => {
+              return {
+                name: profile.global_name ?? profile.username,
+                username: profile.username,
+                image: profile.image_url,
+              }
+            },
           },
         },
         auth: betterAuth({
@@ -55,6 +64,7 @@ import { CharactersModule } from './characters/characters.module'
     GalleryModule,
     AnimeModule,
     CharactersModule,
+    TagsModule,
   ],
   controllers: [
     AppController,
@@ -69,6 +79,7 @@ import { CharactersModule } from './characters/characters.module'
       provide: APP_PIPE,
       useClass: ZodValidationPipe
     },
+    TagsService,
   ],
 })
 export class AppModule {}

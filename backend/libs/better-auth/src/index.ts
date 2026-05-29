@@ -9,12 +9,6 @@ export const getBasicConfig = () => ({
 
   plugins: [ passkey() ],
 
-  mapProfileToUser: (profile) => {
-    return {
-      username: profile.username,
-    }
-  },
-
   // Schema changes
   user: {
     additionalFields: {

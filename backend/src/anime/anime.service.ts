@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
 import {
+  DrizzleTx,
   EpisodeRecord,
   episodesTable,
   SeasonRecord,
@@ -32,7 +33,7 @@ import type {
   ImportSeriesResult,
   ShikimoriAnime,
 } from './dto/shikimori-anime.types'
-import { DrizzleTx, ShikomoriStatus } from './anime.types'
+import { ShikomoriStatus } from './anime.types'
 
 interface ListSeriesOptions {
   limit?: number

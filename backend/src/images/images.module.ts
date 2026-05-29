@@ -8,11 +8,12 @@ import { TaskQueueModule } from '@app/task-queue'
 import { EventsModule } from '@app/events'
 import { ImagesController } from './images.controller'
 import { CharactersModule } from '../characters/characters.module'
+import { TagsModule } from '../tags/tags.module'
 
 @Module({
   providers: [ ImagesService ],
   exports: [ ImagesService ],
-  imports: [ UsersModule, R2Module, MlClientModule, DbModule, TaskQueueModule, EventsModule, CharactersModule ],
+  imports: [ UsersModule, R2Module, MlClientModule, DbModule, TaskQueueModule, EventsModule, CharactersModule, TagsModule ],
   controllers: [ ImagesController ],
 })
 export class ImagesModule {}

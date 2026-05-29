@@ -20,8 +20,11 @@ export class UsersService {
   async getUser(id: string) {
     const [ data ] = await this.db
       .select({
+        id: user.id,
         name: user.name,
+        username: user.username,
         avatarUrl: user.image,
+        permissions: user.permissions,
       })
       .from(user)
       .where(eq(user.id, id))

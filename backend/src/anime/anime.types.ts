@@ -5,6 +5,3 @@ export enum ShikomoriStatus {
   Ongoing = 'ongoing',
   Released = 'released',
 }
-
-export type DrizzleTx = Parameters<Parameters<DrizzleDB['transaction']>[0]>[0]
-

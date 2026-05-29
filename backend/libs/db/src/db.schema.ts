@@ -1,7 +1,8 @@
-import { date, index, integer, interval, jsonb, pgEnum, pgTable, text, timestamp, unique } from 'drizzle-orm/pg-core'
+import { date, index, integer, interval, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, unique } from 'drizzle-orm/pg-core'
 import { user } from '@app/better-auth/auth.schema'
 import { sql } from 'drizzle-orm'
 import { TimeUnit } from '@app/types/time-unit.enum'
+import type { DrizzleDB } from '@app/db/index'
 
 export * from '@app/better-auth/auth.schema'
 
@@ -161,8 +162,19 @@ export const tagsToImagesTable = pgTable('tags_to_images', {
     .references(() => imagesTable.id, { onDelete: 'cascade' })
     .notNull(),
 }, (t) => [
+  primaryKey({ columns: [ t.imageId, t.tagId ] }),
   unique('tags_to_images_unique').on(t.tagId, t.imageId),
   index('tags_to_images_tag_id_idx').on(t.tagId),
+])
+
+export const imageTagIndexTable = pgTable('image_tag_index', {
+  imageId: text('image_id')
+    .references(() => imagesTable.id, { onDelete: 'cascade' })
+    .primaryKey(),
+
+  tagIds: integer('tag_ids').array().notNull(),
+}, (t) => [
+  index('image_tag_index_tag_ids_idx').using('gin', t.tagIds),
 ])
 
 export const taskQueueTable = pgTable('task_queue', {
@@ -197,3 +209,5 @@ export type ImageRecord = typeof imagesTable.$inferSelect;
 export type SeriesRecord = typeof seriesTable.$inferSelect;
 export type SeasonRecord = typeof seasonsTable.$inferSelect;
 export type EpisodeRecord = typeof episodesTable.$inferSelect;
+
+export type DrizzleTx = Parameters<Parameters<DrizzleDB['transaction']>[0]>[0]

@@ -26,7 +26,7 @@ export class TaskQueueWorker implements OnApplicationBootstrap, OnModuleDestroy 
   }
 
   wake() {
-    if (this.stopping) queueMicrotask(() => this.drain())
+    if (!this.stopping) queueMicrotask(() => this.drain())
   }
 
   private async drain() {
@@ -56,10 +56,9 @@ export class TaskQueueWorker implements OnApplicationBootstrap, OnModuleDestroy 
 
     try {
       await handler(job)
+      await this.makeDone(job)
     } catch (error) {
       await this.markFailed(job, error)
-    } finally {
-      await this.makeDone(job)
     }
   }
 
