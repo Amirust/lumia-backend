@@ -12,9 +12,20 @@ services:
       - lumia-network
     depends_on:
       - postgres
+      - ml
     build:
       dockerfile: Dockerfile
       context: .
+    restart: unless-stopped
+
+  ml:
+    networks:
+      - lumia-network
+    build:
+      dockerfile: Dockerfile
+      context: ./ml
+    volumes:
+      - ./ml/models:/app/models
     restart: unless-stopped
 
   postgres:
