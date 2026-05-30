@@ -454,6 +454,8 @@ export class AnimeService {
           'Accept': 'application/json',
         },
       })
+
+      console.log(`Fetched Shikimori anime ${id} with status ${res.status}`)
     } catch {
       throw new BadGatewayException({ code: ErrorCode.ShikimoriRequestFailed })
     }
