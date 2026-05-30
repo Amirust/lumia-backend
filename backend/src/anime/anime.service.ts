@@ -252,7 +252,7 @@ export class AnimeService {
     const [ episode ] = await this.db
       .select({
         ...getTableColumns(episodesTable),
-        imagesCount: sql<number>`COUNT(${screenshotsTable.id})`,
+        imagesCount: sql<number>`COUNT(${screenshotsTable.id})`.mapWith(Number),
       })
       .from(episodesTable)
       .where(eq(episodesTable.id, id))
@@ -271,7 +271,7 @@ export class AnimeService {
     return this.db
       .select({
         ...getTableColumns(episodesTable),
-        imagesCount: sql<number>`COUNT(${screenshotsTable.id})`,
+        imagesCount: sql<number>`COUNT(${screenshotsTable.id})`.mapWith(Number),
       })
       .from(episodesTable)
       .where(eq(episodesTable.seasonId, seasonId))
