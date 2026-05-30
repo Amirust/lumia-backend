@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
-import { charactersTable, imagesTable } from '@app/db/db.schema'
-import { and, eq, sql } from 'drizzle-orm'
+import { charactersTable, imagesTable, tagsTable } from '@app/db/db.schema'
+import { and, eq, getTableColumns, sql } from 'drizzle-orm'
 import { snowflake } from '@app/utils/snowflake'
 
 interface FindManyOptions {
@@ -18,16 +18,23 @@ export class CharactersService {
 
   async findOne(id: string) {
     const [ data ] = await this.db
-      .select()
+      .select({
+        ...getTableColumns(charactersTable),
+        tag: tagsTable.name
+      })
       .from(charactersTable)
       .where(eq(charactersTable.id, id))
+      .leftJoin(tagsTable, eq(tagsTable.id, charactersTable.tagId))
 
     return data
   }
 
   async findMany(limit: number = 10, options: FindManyOptions) {
     return this.db
-      .select()
+      .select({
+        ...getTableColumns(charactersTable),
+        tag: tagsTable.name
+      })
       .from(charactersTable)
       .where(and(
         options.lastSeenId ?
@@ -37,7 +44,8 @@ export class CharactersService {
           sql`${charactersTable.displayName} % ${options.name}` :
           undefined,
       ))
-      .orderBy(sql`similarity(${charactersTable.displayName}, ${options.name}) DESC`)
+      .orderBy(sql`similarity(${charactersTable.displayName}, ${options.name ?? ''}) DESC`)
+      .leftJoin(tagsTable, eq(tagsTable.id, charactersTable.tagId))
       .limit(limit)
   }
 

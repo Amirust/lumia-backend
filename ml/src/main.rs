@@ -41,11 +41,11 @@ async fn main() {
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:4000")
         .await
         .unwrap();
 
-    println!("listening on 0.0.0.0:3000");
+    println!("listening on 0.0.0.0:4000");
     axum::serve(listener, app)
         .await
         .expect("failed to start server");

@@ -15,16 +15,23 @@ async function bootstrap() {
     AppModule,
     new FastifyAdapter(),
     {
-      cors: true,
       bodyParser: false
     },
   )
+
+  const config = app.get<ConfigService>(ConfigService)
+
+  app.enableCors({
+    origin: config.getOrThrow('FRONTEND_ORIGIN'),
+    methods: [ 'GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS' ],
+    allowedHeaders: [ 'Content-Type', 'Authorization' ],
+    credentials: true,
+  })
 
   await app.register(multipart, {
     limits: { fileSize: MaxFileSize, files: MaxFileCountPerTransaction },
   })
 
-  const config = app.get<ConfigService>(ConfigService)
   const logger = new Logger('Bootstrap')
 
   if (config.get('OPENAPI_ENABLED') === 'true') {

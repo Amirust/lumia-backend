@@ -26,6 +26,7 @@ import UpdateImageDto from './dto/update-image.dto'
 import ImageResponseDto from './dto/image.response.dto'
 import UploadResponseDto from './dto/upload.response.dto'
 import DeleteImageResponseDto from './dto/delete-image.response.dto'
+import { isValidImage } from '@app/utils/is-image-valid'
 
 @ApiTags('images')
 @Controller('images')
@@ -62,10 +63,15 @@ export class ImagesController {
     if (!buffers.length)
       throw new BadRequestException({ code: ErrorCode.NoFilesUploaded })
 
-    const files = buffers.map((buffer) => ({
-      buffer,
-      options: { episodeId, timestampSeconds },
-    }))
+    const files = buffers
+      .map((buffer) => ({
+        buffer,
+        options: { episodeId, timestampSeconds },
+      }))
+
+    const isSomeCorrupted = await Promise.all(files.map(async ({ buffer }) => !(await isValidImage(Buffer.from(buffer, 0, buffer.byteLength)))))
+    if (isSomeCorrupted.some((isCorrupted) => isCorrupted))
+      throw new BadRequestException({ code: ErrorCode.CorruptedImage })
 
     const created = await this.imagesService.uploadFiles(files, session.user.id, sourceType)
 

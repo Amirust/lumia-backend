@@ -35,6 +35,7 @@ import { PermissionGuard } from './common/permission.guard'
       useFactory: (config: ConfigService, db: NodePgDatabase)=> ({
         auth: betterAuth({
           ...getBasicConfig(),
+          trustedOrigins: [ config.getOrThrow('FRONTEND_ORIGIN') ],
           socialProviders: {
             discord: {
               clientId: config.getOrThrow('DISCORD_CLIENT_ID'),

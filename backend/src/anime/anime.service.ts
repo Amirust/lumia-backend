@@ -248,11 +248,16 @@ export class AnimeService {
     return created
   }
 
-  async findEpisodeById(id: string): Promise<EpisodeRecord> {
+  async findEpisodeById(id: string): Promise<EpisodeRecordWithImagesCount> {
     const [ episode ] = await this.db
-      .select()
+      .select({
+        ...getTableColumns(episodesTable),
+        imagesCount: sql<number>`COUNT(${screenshotsTable.id})`,
+      })
       .from(episodesTable)
       .where(eq(episodesTable.id, id))
+      .leftJoin(screenshotsTable, eq(screenshotsTable.episodeId, episodesTable.id))
+      .groupBy(episodesTable.id)
 
     if (!episode)
       throw new NotFoundException({ code: ErrorCode.EpisodeNotFound })
@@ -271,6 +276,7 @@ export class AnimeService {
       .from(episodesTable)
       .where(eq(episodesTable.seasonId, seasonId))
       .leftJoin(screenshotsTable, eq(screenshotsTable.episodeId, episodesTable.id))
+      .groupBy(episodesTable.id)
       .orderBy(asc(episodesTable.number))
   }
 

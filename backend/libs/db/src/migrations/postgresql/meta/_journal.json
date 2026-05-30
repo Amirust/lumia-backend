@@ -50,6 +50,13 @@
       "when": 1780096395581,
       "tag": "0006_sour_prima",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780168227876,
+      "tag": "0007_material_tarot",
+      "breakpoints": true
     }
   ]
 }

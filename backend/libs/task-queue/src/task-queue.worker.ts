@@ -67,7 +67,11 @@ export class TaskQueueWorker implements OnApplicationBootstrap, OnModuleDestroy 
       this.db
         .select({ id: taskQueueTable.id })
         .from(taskQueueTable)
-        .where(and(inArray(taskQueueTable.state, [ TaskState.Created, TaskState.Retry ]), lt(taskQueueTable.startAfter, sql`now()`)))
+        .where(and(
+          inArray(taskQueueTable.state, [ TaskState.Created, TaskState.Retry ]),
+          lt(taskQueueTable.startAfter, sql`now()`),
+          lt(taskQueueTable.retryCount, taskQueueTable.retryLimit)
+        ))
         .orderBy(taskQueueTable.startAfter, taskQueueTable.id)
         .limit(limit)
         .for('update', { skipLocked: true }),

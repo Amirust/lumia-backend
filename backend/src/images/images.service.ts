@@ -14,7 +14,18 @@ import {
   tagsTable,
   tagsToImagesTable,
 } from '@app/db/db.schema'
-import { and, arrayContains, arrayOverlaps, eq, exists, getTableColumns, inArray, notInArray, sql } from 'drizzle-orm'
+import {
+  and,
+  arrayContains,
+  arrayOverlaps,
+  asc,
+  eq,
+  exists,
+  getTableColumns,
+  inArray,
+  notInArray,
+  sql,
+} from 'drizzle-orm'
 import { UsersService } from '../users/users.service'
 import { UserPermission } from '@app/types/user.permissions'
 import { ErrorCode } from '@app/types/error-code.enum'
@@ -113,7 +124,11 @@ export class ImagesService {
       }
 
     return {
-      images: await this.resolveImages(result.ids),
+      images: (await this.resolveImages(result.ids))
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        ),
       afterFilter: result.afterFilter,
     }
   }
@@ -160,11 +175,15 @@ export class ImagesService {
     const created = uploaded.filter((i): i is ImageRecord => !!i)
 
     for (const image of created) {
-      await this.taskQueue.send(TaskType.GetTags, { imageId: image.id }, { singletonKey: `get-tags-${image.id}` })
+      await this.taskQueue.send(
+        TaskType.GetTags,
+        { imageId: image.id },
+        { singletonKey: `get-tags-${image.id}`, retryLimit: 5 }
+      )
       await this.taskQueue.send(
         TaskType.GetWebpThumbnail,
         { imageId: image.id },
-        { singletonKey: `get-webp-${image.id}` },
+        { singletonKey: `get-webp-${image.id}`, retryLimit: 5 },
       )
     }
 
@@ -436,7 +455,7 @@ export class ImagesService {
             : undefined,
         ),
       )
-      .orderBy(sql`${imagesTable.id}::bigint`)
+      .orderBy(asc(imagesTable.createdAt))
       .limit(limit)
 
     const afterFilter = result.length && 'afterFilter' in result[0] ? result[0].afterFilter : undefined

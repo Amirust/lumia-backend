@@ -55,7 +55,7 @@ export const charactersTable = pgTable('characters', {
   displayName: text('display_name').notNull(),
   coverImageId: text('image_id').references(() => imagesTable.id, { onDelete: 'set null' }),
 }, (t) => [
-  index('characters_tag_id_idx').on(t.tagId),
+  unique('characters_tag_id_idx').on(t.tagId),
   index('characters_display_name_trgm_idx')
     .using('gin', sql`${t.displayName} gin_trgm_ops`),
 ])

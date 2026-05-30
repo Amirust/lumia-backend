@@ -8,4 +8,9 @@ const character = z.object({
   coverImageId: z.string().nullable(),
 })
 
+const characterWithTag = character.extend({
+  tag: z.string().nullable(),
+})
+
 export default class CharacterResponseDto extends createZodDto(character) {}
+export class CharacterWithTagResponseDto extends createZodDto(characterWithTag) {}

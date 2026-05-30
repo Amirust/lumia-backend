@@ -180,7 +180,7 @@ export class AnimeController {
   @Get('episodes/:id')
   @ApiOperation({ summary: 'Get episode by id' })
   @ApiParam({ name: 'id' })
-  @ApiOkResponseWrapped(EpisodeResponseDto)
+  @ApiOkResponseWrapped(EpisodeWithImagesCountResponseDto)
   @ApiErrorResponse(404, 'Episode not found')
   async getEpisode(@Param('id') id: string) {
     return this.animeService.findEpisodeById(id)

@@ -17,4 +17,5 @@ export enum ErrorCode {
   ImageNotFound = 3001,
   NoFilesUploaded,
   NotMultipart,
+  CorruptedImage,
 }
