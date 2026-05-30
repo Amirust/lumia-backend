@@ -10,4 +10,10 @@ const episode = z.object({
   updatedAt: z.iso.datetime(),
 })
 
+const episodeWithImagesCount = episode.extend({
+  imagesCount: z.number().int(),
+})
+
 export default class EpisodeResponseDto extends createZodDto(episode) {}
+
+export class EpisodeWithImagesCountResponseDto extends createZodDto(episodeWithImagesCount) {}

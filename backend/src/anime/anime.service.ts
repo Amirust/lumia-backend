@@ -13,12 +13,13 @@ import {
   DrizzleTx,
   EpisodeRecord,
   episodesTable,
+  screenshotsTable,
   SeasonRecord,
   seasonsTable,
   SeriesRecord,
   seriesTable,
 } from '@app/db/db.schema'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, getTableColumns, sql } from 'drizzle-orm'
 import { snowflake } from '@app/utils/snowflake'
 import { ShikimoriRefreshInterval } from '@app/types/constants'
 import { ErrorCode } from '@app/types/error-code.enum'
@@ -33,7 +34,7 @@ import type {
   ImportSeriesResult,
   ShikimoriAnime,
 } from './dto/shikimori-anime.types'
-import { ShikomoriStatus } from './anime.types'
+import { EpisodeRecordWithImagesCount, ShikomoriStatus } from './anime.types'
 
 interface ListSeriesOptions {
   limit?: number
@@ -259,13 +260,17 @@ export class AnimeService {
     return episode
   }
 
-  async findEpisodesBySeason(seasonId: string): Promise<EpisodeRecord[]> {
+  async findEpisodesBySeason(seasonId: string): Promise<EpisodeRecordWithImagesCount[]> {
     await this.assertSeasonExists(seasonId)
 
     return this.db
-      .select()
+      .select({
+        ...getTableColumns(episodesTable),
+        imagesCount: sql<number>`COUNT(${screenshotsTable.id})`,
+      })
       .from(episodesTable)
       .where(eq(episodesTable.seasonId, seasonId))
+      .leftJoin(screenshotsTable, eq(screenshotsTable.episodeId, episodesTable.id))
       .orderBy(asc(episodesTable.number))
   }
 

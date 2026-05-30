@@ -26,7 +26,7 @@ import UpdateSeasonDto from './dto/update-season.dto'
 import SeasonResponseDto from './dto/season.response.dto'
 import CreateEpisodeDto from './dto/create-episode.dto'
 import UpdateEpisodeDto from './dto/update-episode.dto'
-import EpisodeResponseDto from './dto/episode.response.dto'
+import EpisodeResponseDto, { EpisodeWithImagesCountResponseDto } from './dto/episode.response.dto'
 import ImportShikimoriDto from './dto/import-shikimori.dto'
 
 @ApiTags('anime')
@@ -171,7 +171,7 @@ export class AnimeController {
   @Get('seasons/:id/episodes')
   @ApiOperation({ summary: 'List episodes of a season' })
   @ApiParam({ name: 'id', description: 'season id' })
-  @ApiOkResponseWrapped(EpisodeResponseDto, { isArray: true })
+  @ApiOkResponseWrapped(EpisodeWithImagesCountResponseDto, { isArray: true })
   @ApiErrorResponse(404, 'Season not found')
   async listEpisodes(@Param('id') seasonId: string) {
     return this.animeService.findEpisodesBySeason(seasonId)
