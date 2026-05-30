@@ -13,12 +13,12 @@ import {
   Sse,
 } from '@nestjs/common'
 import { ApiConsumes, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
+import { map } from 'rxjs'
 import { type FastifyRequest } from 'fastify'
 import { type UserSession } from '@thallesp/nestjs-better-auth'
 import { ApiErrorResponse, ApiOkResponseWrapped } from '@app/response'
 import { ImagesService } from './images.service'
 import { EventsService } from '@app/events'
-import { EventKey } from '@app/events/events.types'
 import { ErrorCode } from '@app/types/error-code.enum'
 import { ImageSourceType } from '@app/types/image.source-type.enum'
 import PatchTagsDto from './dto/patch-tags.dto'
@@ -139,8 +139,10 @@ export class ImagesController {
 
   @Sse(':imageId/events')
   streamImageEvents(@Param('imageId') imageId: string) {
-    return this.events.asObservable(
-      EventKey.AiTagsResolved(imageId)
+    return this.events.asObservable(imageId).pipe(
+      map(event => {
+        return { data: event }
+      }),
     )
   }
 }

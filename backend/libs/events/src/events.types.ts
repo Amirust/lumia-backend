@@ -1,5 +1,5 @@
 export enum EventType {
-  AiTagsResolved
+  AiTagsResolved = 'ai-tags-resolved'
 }
 
 export const EventKey = {

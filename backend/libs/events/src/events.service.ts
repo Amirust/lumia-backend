@@ -7,16 +7,17 @@ export class EventsService {
   private readonly events$ = new Map<string, ReplaySubject<EventPayload>>()
 
   asObservable(key: string) {
-    if (!this.events$.has(key))
-      this.events$.set(key, new ReplaySubject<EventPayload>(100))
-
-    return this.events$.get(key)!.asObservable()
+    return this.getOrCreate(key).asObservable()
   }
 
   emit(key: string, event: EventPayload) {
+    this.getOrCreate(key).next(event)
+  }
+
+  private getOrCreate(key: string) {
     if (!this.events$.has(key))
       this.events$.set(key, new ReplaySubject<EventPayload>(100))
 
-    this.events$.get(key)!.next(event)
+    return this.events$.get(key)!
   }
 }

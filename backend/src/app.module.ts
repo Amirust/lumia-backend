@@ -36,6 +36,7 @@ import { PermissionGuard } from './common/permission.guard'
         auth: betterAuth({
           ...getBasicConfig(),
           trustedOrigins: [ config.getOrThrow('FRONTEND_ORIGIN') ],
+          baseURL: config.getOrThrow('BACKEND_URL'),
           socialProviders: {
             discord: {
               clientId: config.getOrThrow('DISCORD_CLIENT_ID'),
