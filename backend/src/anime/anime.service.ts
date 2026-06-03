@@ -249,15 +249,19 @@ export class AnimeService {
   }
 
   async findEpisodeById(id: string): Promise<EpisodeRecordWithImagesCount> {
+    const randomScreenshot = this.getRandomScreenshotIdQuery()
+
     const [ episode ] = await this.db
       .select({
         ...getTableColumns(episodesTable),
         imagesCount: sql<number>`COUNT(${screenshotsTable.id})`.mapWith(Number),
+        imageId: randomScreenshot.imageId
       })
       .from(episodesTable)
       .where(eq(episodesTable.id, id))
       .leftJoin(screenshotsTable, eq(screenshotsTable.episodeId, episodesTable.id))
-      .groupBy(episodesTable.id)
+      .leftJoinLateral(randomScreenshot, sql`true`)
+      .groupBy(episodesTable.id, randomScreenshot.imageId)
 
     if (!episode)
       throw new NotFoundException({ code: ErrorCode.EpisodeNotFound })
@@ -268,15 +272,19 @@ export class AnimeService {
   async findEpisodesBySeason(seasonId: string): Promise<EpisodeRecordWithImagesCount[]> {
     await this.assertSeasonExists(seasonId)
 
+    const randomScreenshot = this.getRandomScreenshotIdQuery()
+
     return this.db
       .select({
         ...getTableColumns(episodesTable),
         imagesCount: sql<number>`COUNT(${screenshotsTable.id})`.mapWith(Number),
+        imageId: randomScreenshot.imageId,
       })
       .from(episodesTable)
       .where(eq(episodesTable.seasonId, seasonId))
       .leftJoin(screenshotsTable, eq(screenshotsTable.episodeId, episodesTable.id))
-      .groupBy(episodesTable.id)
+      .leftJoinLateral(randomScreenshot, sql`true`)
+      .groupBy(episodesTable.id, randomScreenshot.imageId)
       .orderBy(asc(episodesTable.number))
   }
 
@@ -311,9 +319,8 @@ export class AnimeService {
 
   async importSeriesFromShikimori(url: string): Promise<ImportSeriesResult> {
     const shikimoriId = this.parseShikimoriUrl(url)
-    await this.assertShikimoriNotImported(shikimoriId)
-
     const data = await this.fetchShikimoriAnime(shikimoriId)
+    await this.assertShikimoriNotImported(data.id)
 
     return this.db.transaction(async (tx) => {
       const seriesId = snowflake()
@@ -343,9 +350,8 @@ export class AnimeService {
     if (!series)
       throw new NotFoundException({ code: ErrorCode.SeriesNotFound })
 
-    await this.assertShikimoriNotImported(shikimoriId)
-
     const data = await this.fetchShikimoriAnime(shikimoriId)
+    await this.assertShikimoriNotImported(data.id)
 
     return this.db.transaction(async (tx) => {
       const [ maxRow ] = await tx
@@ -435,16 +441,16 @@ export class AnimeService {
       throw new NotFoundException({ code: ErrorCode.SeasonNotFound })
   }
 
-  private parseShikimoriUrl(url: string): number {
-    const match = url.match(/animes\/(\d+)/)
+  private parseShikimoriUrl(url: string): string {
+    const match = url.match(/animes\/([a-zA-Z]?\d+)/)
 
     if (!match)
       throw new BadRequestException({ code: ErrorCode.InvalidShikimoriUrl })
 
-    return Number(match[1])
+    return match[1]
   }
 
-  private async fetchShikimoriAnime(id: number): Promise<ShikimoriAnime> {
+  private async fetchShikimoriAnime(id: number | string): Promise<ShikimoriAnime> {
     const baseUrl = this.configService.get<string>('SHIKIMORI_API_URL')
 
     let res: Response
@@ -549,5 +555,15 @@ export class AnimeService {
 
     const created = await this.ensureEpisodes(season.id, this.getEpisodeCount(data))
     this.logger.log(`Refreshed season ${season.id} from Shikimori (${created} new episodes)`)
+  }
+
+  private getRandomScreenshotIdQuery() {
+    return this.db
+      .select({ imageId: screenshotsTable.imageId })
+      .from(screenshotsTable)
+      .where(eq(screenshotsTable.episodeId, episodesTable.id))
+      .orderBy(sql`random()`)
+      .limit(1)
+      .as('random_screenshot')
   }
 }

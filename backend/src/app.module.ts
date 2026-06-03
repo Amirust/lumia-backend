@@ -35,17 +35,22 @@ import { PermissionGuard } from './common/permission.guard'
       useFactory: (config: ConfigService, db: NodePgDatabase)=> ({
         auth: betterAuth({
           ...getBasicConfig(),
-          trustedOrigins: [ config.getOrThrow('FRONTEND_ORIGIN') ],
+          trustedOrigins: [ config.getOrThrow('FRONTEND_ORIGIN'), 'http://localhost:3000' ],
           baseURL: config.getOrThrow('BACKEND_URL'),
           socialProviders: {
             discord: {
               clientId: config.getOrThrow('DISCORD_CLIENT_ID'),
               clientSecret: config.getOrThrow('DISCORD_CLIENT_SECRET'),
+              overrideUserInfoOnSignIn: true,
               mapProfileToUser: (profile) => {
+                const ext = profile.avatar?.startsWith('a_') ? 'gif' : 'png'
+                const image = profile.avatar ?
+                  `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.${ext}?size=512` : null
+
                 return {
                   name: profile.global_name ?? profile.username,
                   username: profile.username,
-                  image: profile.image_url,
+                  image: image ?? profile.image_url,
                 }
               },
             },

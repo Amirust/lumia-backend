@@ -8,4 +8,5 @@ export enum ShikomoriStatus {
 
 export type EpisodeRecordWithImagesCount = EpisodeRecord & {
   imagesCount: number
+  imageId: string | null
 }

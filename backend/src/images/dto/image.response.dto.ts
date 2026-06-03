@@ -52,13 +52,15 @@ export const imageSchema = z.object({
   width: z.number().int().nullable(),
   height: z.number().int().nullable(),
   fileSize: z.number().int().nullable(),
-  sourceType: z.nativeEnum(ImageSourceType),
-  status: z.nativeEnum(ImageStatus),
+  timestampSeconds: z.number().int().nullable(),
+  sourceType: z.enum(ImageSourceType),
+  status: z.enum(ImageStatus),
   errorMessage: z.string().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 
   tagsByCategory: z.record(z.string(), z.array(tagWithColor)),
+  favorite: z.boolean(),
 
   series: series.nullable().optional(),
   season: season.nullable().optional(),

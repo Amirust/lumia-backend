@@ -1,30 +1,31 @@
 import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
 import {
-  EpisodeRecord,
   episodesTable,
-  imageTagIndexTable,
+  favoritesTable,
   ImageRecord,
   imagesTable,
+  imageTagIndexTable,
   screenshotsTable,
-  SeasonRecord,
   seasonsTable,
-  SeriesRecord,
   seriesTable,
   tagsTable,
-  tagsToImagesTable,
+  tagsToImagesTable
 } from '@app/db/db.schema'
 import {
   and,
   arrayContains,
   arrayOverlaps,
   asc,
+  desc,
   eq,
   exists,
   getTableColumns,
+  getTableName,
   inArray,
+  notExists,
   notInArray,
-  sql,
+  sql
 } from 'drizzle-orm'
 import { UsersService } from '../users/users.service'
 import { UserPermission } from '@app/types/user.permissions'
@@ -45,49 +46,15 @@ import { EventsService } from '@app/events'
 import { EventKey, EventType } from '@app/events/events.types'
 import { CharactersService } from '../characters/characters.service'
 import { TagsService } from '../tags/tags.service'
-
-interface UploadImageOptions {
-  episodeId?: string;
-
-  timestampSeconds?: number;
-}
-
-type PreparedUpload = {
-  meta: ReturnType<typeof getFileMetaFromBuffer> & {
-    id: string
-    authorId: string
-    storageKey: string
-  }
-  file: { buffer: ArrayBuffer; options: UploadImageOptions }
-}
-
-interface FindManyOptions {
-  tags?: string[];
-  excludeTags?: string[];
-
-  authorId?: string;
-
-  seriesId?: string;
-  seasonId?: string;
-  episodeId?: string;
-
-  sourceType?: ImageSourceType;
-}
-
-interface TagWithColor {
-  tag: string;
-  color?: string;
-}
-
-export interface ImageResponse extends ImageRecord {
-  tagsByCategory: {
-    [category in TagsCategory]?: TagWithColor[]
-  }
-
-  series?: SeriesRecord | null
-  season?: SeasonRecord | null
-  episode?: EpisodeRecord | null
-}
+import {
+  FindManyOptions,
+  ImageResponse,
+  ImageSortDirection,
+  ImageSortType,
+  PreparedUpload,
+  TagWithColor,
+  UploadImageOptions
+} from './images.types'
 
 @Injectable()
 export class ImagesService {
@@ -108,14 +75,17 @@ export class ImagesService {
     private readonly tagsService: TagsService,
   ) {}
 
-  async findOne(id: string) {
-    const data = await this.resolveImages([ id ])
+  async findOne(id: string, userId?: string) {
+    const data = await this.resolveImages([ id ], userId)
 
     return data.length ? data[0] : null
   }
 
-  async findMany(limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
-    const result = await this.findManyDeep(limit, lastSeenId, options)
+  async findMany(userId: string, limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
+    const result = await this.findManyDeep(limit, lastSeenId, {
+      ...options,
+      userId,
+    })
 
     if (!result.ids.length)
       return {
@@ -124,19 +94,17 @@ export class ImagesService {
       }
 
     return {
-      images: (await this.resolveImages(result.ids))
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        ),
+      images: (await this.resolveImages(result.ids, userId, options.onlyFavorites)).sort(
+        this.resolveFindManySortFunction(options.sortType, options.sortDirection)
+      ),
       afterFilter: result.afterFilter,
     }
   }
 
   async uploadFiles(
-    files: { buffer: ArrayBuffer, options: UploadImageOptions }[],
+    files: { buffer: ArrayBuffer; options: UploadImageOptions }[],
     authorId: string,
-    source: ImageSourceType
+    source: ImageSourceType,
   ) {
     if (!(await this.usersService.hasPermission(authorId, UserPermission.UploadImages)))
       throw new ForbiddenException({ code: ErrorCode.NotEnoughPermissions })
@@ -168,9 +136,7 @@ export class ImagesService {
     /*
      * Uploading and inserting in DB
      */
-    const uploaded = await Promise.all(
-      filesWithMeta.map((data) => this.uploadSingleFile(data)),
-    )
+    const uploaded = await Promise.all(filesWithMeta.map((data) => this.uploadSingleFile(data)))
 
     const created = uploaded.filter((i): i is ImageRecord => !!i)
 
@@ -178,7 +144,7 @@ export class ImagesService {
       await this.taskQueue.send(
         TaskType.GetTags,
         { imageId: image.id },
-        { singletonKey: `get-tags-${image.id}`, retryLimit: 5 }
+        { singletonKey: `get-tags-${image.id}`, retryLimit: 5 },
       )
       await this.taskQueue.send(
         TaskType.GetWebpThumbnail,
@@ -190,28 +156,51 @@ export class ImagesService {
     return created
   }
 
-  async editTags(imageId: string, userId: string, changes: { add?: string[]; remove?: string[] }) {
-    const image = await this.findOne(imageId)
+  async editTags(
+    imageId: string,
+    userId: string,
+    changes: { add?: { name: string; category: string }[]; remove?: string[] },
+  ) {
+    const image = await this.findOne(imageId, userId)
 
-    if (!image)
-      throw new NotFoundException({ code: ErrorCode.ImageNotFound })
+    if (!image) throw new NotFoundException({ code: ErrorCode.ImageNotFound })
 
-    if (image.authorId !== userId && !(await this.usersService.hasPermission(userId, UserPermission.EditOthersImageTags)))
+    if (
+      image.authorId !== userId &&
+      !(await this.usersService.hasPermission(userId, UserPermission.EditOthersImageTags))
+    )
       throw new ForbiddenException({ code: ErrorCode.NotEnoughPermissions })
 
-    if (changes.add?.length) await this.tagsService.addTags(imageId, changes.add)
+    if (changes.add?.length) {
+      await this.tagsService.addTagsToImage(imageId, changes.add)
+
+      const characterTags = changes.add.filter((t) => t.category === 'character')
+      if (characterTags.length) {
+        const resolvedIds = await this.tagsService.resolveTagsIds(characterTags.map((t) => t.name))
+
+        await this.charactersService.createIfTagNotExistsBulk(
+          resolvedIds.map(({ id }) => ({
+            tagId: id,
+            imageId,
+          })),
+        )
+      }
+    }
     if (changes.remove?.length) await this.tagsService.removeTags(imageId, changes.remove)
 
     this.lruCacheImages.delete(imageId)
 
-    return this.findOne(imageId)
+    return this.findOne(imageId, userId)
   }
 
-  async updateImage(imageId: string, userId: string, changes: { episodeId?: string | null; sourceType?: ImageSourceType }) {
-    const image = await this.findOne(imageId)
+  async updateImage(
+    imageId: string,
+    userId: string,
+    changes: { episodeId?: string | null; sourceType?: ImageSourceType },
+  ) {
+    const image = await this.findOne(imageId, userId)
 
-    if (!image)
-      throw new NotFoundException({ code: ErrorCode.ImageNotFound })
+    if (!image) throw new NotFoundException({ code: ErrorCode.ImageNotFound })
 
     if (
       image.authorId !== userId &&
@@ -221,16 +210,9 @@ export class ImagesService {
       throw new ForbiddenException({ code: ErrorCode.NotEnoughPermissions })
 
     if (changes.sourceType)
-      await this.db
-        .update(imagesTable)
-        .set({ sourceType: changes.sourceType })
-        .where(eq(imagesTable.id, imageId))
+      await this.db.update(imagesTable).set({ sourceType: changes.sourceType }).where(eq(imagesTable.id, imageId))
 
-    if (changes.episodeId === null)
-      await this.db
-        .delete(screenshotsTable)
-        .where(eq(screenshotsTable.imageId, imageId))
-
+    if (changes.episodeId === null) await this.db.delete(screenshotsTable).where(eq(screenshotsTable.imageId, imageId))
     else if (changes.episodeId)
       await this.db
         .insert(screenshotsTable)
@@ -239,28 +221,30 @@ export class ImagesService {
           imageId,
           episodeId: changes.episodeId,
         })
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: screenshotsTable.imageId,
+          set: { episodeId: changes.episodeId },
+        })
 
     this.lruCacheImages.delete(imageId)
 
-    return this.findOne(imageId)
+    return this.findOne(imageId, userId)
   }
 
   async getTotalCount() {
-    const count = this.db.execute(
+    const count = await this.db.execute(
       sql<{ estimate: number }>`SELECT reltuples::bigint AS estimate
           FROM pg_class
-          WHERE relname = ${imagesTable._.name}`,
+          WHERE relname = ${getTableName(imagesTable)}`,
     )
 
-    return count[0].estimate as number
+    return count.rows[0].estimate as number
   }
 
   async deleteImage(imageId: string, userId: string) {
-    const image = await this.findOne(imageId)
+    const image = await this.findOne(imageId, userId)
 
-    if (!image)
-      throw new NotFoundException({ code: ErrorCode.ImageNotFound })
+    if (!image) throw new NotFoundException({ code: ErrorCode.ImageNotFound })
 
     if (
       image.authorId !== userId &&
@@ -296,6 +280,27 @@ export class ImagesService {
     return { ok: true }
   }
 
+  async setFavorite(imageId: string, userId: string, isFavorite: boolean) {
+    const image = await this.findOne(imageId, userId)
+
+    if (!image) throw new NotFoundException({ code: ErrorCode.ImageNotFound })
+
+    if (isFavorite)
+      await this.db
+        .insert(favoritesTable)
+        .values({
+          userId,
+          imageId,
+        })
+        .onConflictDoNothing()
+    else
+      await this.db
+        .delete(favoritesTable)
+        .where(and(eq(favoritesTable.userId, userId), eq(favoritesTable.imageId, imageId)))
+
+    return { ok: true }
+  }
+
   /*
    * Internal methods
    */
@@ -311,6 +316,7 @@ export class ImagesService {
           .values({
             ...data.meta,
             status: ImageStatus.Pending,
+            timestampSeconds: data.file.options.timestampSeconds,
           })
           .onConflictDoNothing()
           .returning()
@@ -324,12 +330,11 @@ export class ImagesService {
         r2Uploaded = true
 
         const options = data.file.options
-        if (options.episodeId && options.timestampSeconds != null)
+        if (options.episodeId)
           await tx.insert(screenshotsTable).values({
             id: snowflake(),
             imageId: data.meta.id,
             episodeId: options.episodeId,
-            timestampSeconds: options.timestampSeconds,
           })
 
         return inserted[0]
@@ -359,12 +364,10 @@ export class ImagesService {
       const requestedTags = [ ...new Set(options.tags ?? []) ]
       const requestedExcludeTags = [ ...new Set(options.excludeTags ?? []) ]
 
-      const resolvedTags = requestedTags.length ?
-        await this.tagsService.resolveTagsIds(requestedTags) :
-        []
-      const resolvedExcludeTags = requestedExcludeTags.length ?
-        await this.tagsService.resolveTagsIds(requestedExcludeTags) :
-        []
+      const resolvedTags = requestedTags.length ? await this.tagsService.resolveTagsIds(requestedTags) : []
+      const resolvedExcludeTags = requestedExcludeTags.length
+        ? await this.tagsService.resolveTagsIds(requestedExcludeTags)
+        : []
 
       // If some tags were not found, it means no images can be found, so we can return early
       if (requestedTags.length > resolvedTags.length) return { ids: [], afterFilter: 0 }
@@ -386,7 +389,7 @@ export class ImagesService {
       .where(
         and(
           // Pagination
-          lastSeenId ? sql`${imagesTable.id}::bigint > ${lastSeenId}::bigint` : undefined,
+          lastSeenId ? sql`${imagesTable.id}::bigint < ${lastSeenId}::bigint` : undefined,
 
           // tags here
           tagsIds.length
@@ -453,9 +456,29 @@ export class ImagesService {
                 ),
             )
             : undefined,
+
+          options.withoutEpisodeLink
+            ? notExists(
+              this.db
+                .select({ x: sql`1` })
+                .from(screenshotsTable)
+                .where(eq(screenshotsTable.imageId, imagesTable.id)),
+            )
+            : undefined,
+
+          options.onlyFavorites && options.userId
+            ? exists(
+              this.db
+                .select({ x: sql`1` })
+                .from(favoritesTable)
+                .where(and(eq(favoritesTable.imageId, imagesTable.id), eq(favoritesTable.userId, options.userId))),
+            )
+            : undefined,
         ),
       )
-      .orderBy(asc(imagesTable.createdAt))
+      .orderBy(
+        this.resolveFindManyDbSortFunction(options.sortType, options.sortDirection)
+      )
       .limit(limit)
 
     const afterFilter = result.length && 'afterFilter' in result[0] ? result[0].afterFilter : undefined
@@ -466,11 +489,50 @@ export class ImagesService {
     }
   }
 
-  private async resolveImages(imagesIds: string[]) {
+  private resolveFindManyDbSortFunction(
+    sortType: FindManyOptions['sortType'] = ImageSortType.CreatedAt,
+    sortDirection: FindManyOptions['sortDirection'] = ImageSortDirection.Descending,
+  ) {
+    const field = sortType === ImageSortType.TimestampSeconds ? imagesTable.timestampSeconds : imagesTable.createdAt
+
+    return sortDirection === ImageSortDirection.Ascending ?
+      asc(field) :
+      desc(field)
+  }
+
+  private resolveFindManySortFunction(
+    sortType: FindManyOptions['sortType'] = ImageSortType.CreatedAt,
+    sortDirection: FindManyOptions['sortDirection'] = ImageSortDirection.Descending,
+  ) {
+    return (a: ImageResponse, b: ImageResponse) => {
+      const aValue = sortType === ImageSortType.TimestampSeconds ? a.timestampSeconds ?? 0 : new Date(a.createdAt).getTime()
+      const bValue = sortType === ImageSortType.TimestampSeconds ? b.timestampSeconds ?? 0 : new Date(b.createdAt).getTime()
+
+      if (aValue === bValue) return 0
+
+      if (sortDirection === ImageSortDirection.Ascending)
+        return aValue < bValue ? -1 : 1
+      else
+        return aValue > bValue ? -1 : 1
+    }
+  }
+
+  private async resolveImages(imagesIds: string[], userId?: string, onlyFavorites: boolean = false) {
     const missingIds = imagesIds.filter((id) => !this.lruCacheImages.has(id))
     let addImages: ImageResponse[] = []
 
     if (missingIds.length) {
+      const favorite = !userId
+        ? sql<boolean>`false`
+        : onlyFavorites
+          ? sql<boolean>`true`
+          : sql<boolean>`EXISTS (
+            SELECT 1
+            FROM ${favoritesTable}
+            WHERE ${favoritesTable.imageId} = ${imagesTable.id}
+              AND ${favoritesTable.userId} = ${userId}
+          )`
+
       addImages = await this.db
         .select({
           ...getTableColumns(imagesTable),
@@ -478,6 +540,8 @@ export class ImagesService {
           series: seriesTable,
           season: seasonsTable,
           episode: episodesTable,
+
+          favorite,
 
           tagsByCategory: sql<Record<string, TagWithColor[]>>`
             COALESCE((
@@ -497,10 +561,10 @@ export class ImagesService {
         })
         .from(imagesTable)
         .where(inArray(imagesTable.id, missingIds))
-        .leftJoin(screenshotsTable, and(
-          eq(imagesTable.sourceType, ImageSourceType.Screenshot),
-          eq(screenshotsTable.imageId, imagesTable.id),
-        ))
+        .leftJoin(
+          screenshotsTable,
+          and(eq(imagesTable.sourceType, ImageSourceType.Screenshot), eq(screenshotsTable.imageId, imagesTable.id)),
+        )
         .leftJoin(episodesTable, eq(episodesTable.id, screenshotsTable.episodeId))
         .leftJoin(seasonsTable, eq(seasonsTable.id, episodesTable.seasonId))
         .leftJoin(seriesTable, eq(seriesTable.id, seasonsTable.seriesId))
@@ -529,15 +593,16 @@ export class ImagesService {
 
     if (!buffer) return
 
-    const tags = await this.mlService.getTags(buffer)
-    const tagsArray = Object.entries(tags)
-      .map((value) => value[1])
+    // We just don't need artist tags
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { artist, ...tags } = await this.mlService.getTags(buffer)
+
+    const tagsMap = Object.entries(tags)
+      .map(([ category, tags ]) => tags.map((tag) => ({ name: tag, category })))
       .flat()
 
-    if (tagsArray.length)
-      await this.tagsService.addTags(imageId, tagsArray)
-    else
-      this.logger.warn('ML service returned no tags for image ' + imageId, tags)
+    if (tagsMap.length) await this.tagsService.addTagsToImage(imageId, tagsMap)
+    else this.logger.warn('ML service returned no tags for image ' + imageId, tags)
 
     await this.db
       .update(imagesTable)
@@ -563,8 +628,8 @@ export class ImagesService {
       type: EventType.AiTagsResolved,
       data: {
         imageId,
-        tags
-      }
+        tags,
+      },
     })
   }
 

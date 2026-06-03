@@ -29,11 +29,11 @@ export const imagesTable = pgTable('images', {
   height: integer('height'),
   // in bytes
   fileSize: integer('file_size'),
+  timestampSeconds: integer('timestamp_seconds'),
 
   sourceType: sourceTypeEnum('source_type').notNull(),
 
   status: uploadStatusEnum('upload_status').notNull(),
-  errorMessage: text('error_message'),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at')
@@ -45,6 +45,16 @@ export const imagesTable = pgTable('images', {
   index('images_status_idx').on(t.status),
   index('images_source_type_idx').on(t.sourceType),
   unique('images_content_hash_unique').on(t.contentHash),
+])
+
+export const favoritesTable = pgTable('favorites', {
+  userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }).notNull(),
+  imageId: text('image_id').references(() => imagesTable.id, { onDelete: 'cascade' }).notNull(),
+
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  primaryKey({ columns: [ t.userId, t.imageId ] }),
+  index('favorites_user_id_idx').on(t.userId),
 ])
 
 export const charactersTable = pgTable('characters', {
@@ -130,12 +140,10 @@ export const screenshotsTable = pgTable('screenshots', {
   episodeId: text('episode_id').references(() => episodesTable.id, { onDelete: 'cascade' }).notNull(),
   imageId: text('image_id').references(() => imagesTable.id, { onDelete: 'cascade' }).notNull(),
 
-  timestampSeconds: integer('timestamp_seconds'),
-
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [
   index('screenshots_episode_id_idx').on(t.episodeId),
-  index('screenshots_image_id_idx').on(t.imageId),
+  unique('screenshots_image_id_idx').on(t.imageId),
   unique('screenshots_episode_image_unique').on(t.episodeId, t.imageId),
 ])
 

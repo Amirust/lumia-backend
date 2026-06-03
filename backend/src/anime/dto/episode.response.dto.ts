@@ -12,6 +12,7 @@ const episode = z.object({
 
 const episodeWithImagesCount = episode.extend({
   imagesCount: z.number().int(),
+  imageId: z.string().nullable(),
 })
 
 export default class EpisodeResponseDto extends createZodDto(episode) {}

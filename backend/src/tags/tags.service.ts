@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
 import { DrizzleTx, imageTagIndexTable, tagsTable, tagsToImagesTable } from '@app/db/db.schema'
-import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 
 @Injectable()
 export class TagsService {
@@ -9,6 +9,31 @@ export class TagsService {
     @Inject(DB_CONNECTION)
     private readonly db: DrizzleDB,
   ) {}
+
+  async updateTag(tag: string | number, options: { newName?: string; newCategory?: string; colorOverride?: string | null }) {
+    let id: number
+
+    if (typeof tag === 'number')
+      id = tag
+    else {
+      const ids = await this.resolveTagsIds([ tag ])
+      id = ids[0]?.id
+    }
+
+    if (!id) return undefined
+
+    const [ updated ] = await this.db
+      .update(tagsTable)
+      .set({
+        name: options.newName,
+        category: options.newCategory,
+        colorOverride: options.colorOverride,
+      })
+      .where(eq(tagsTable.id, id))
+      .returning()
+
+    return updated
+  }
 
   async resolveTagsIds(tags: string[]) {
     return this.db
@@ -19,16 +44,23 @@ export class TagsService {
       .where(inArray(tagsTable.name, tags))
   }
 
-  async addTags(id: string, toAdd: string[]) {
-    const ids = await this.resolveTagsIds(toAdd)
-
-    if (!ids.length) return undefined
+  async addTagsToImage(id: string, toAdd: { name: string, category: string }[]) {
+    if (!toAdd.length) return undefined
 
     const [ updated ] = await this.db.transaction(async (tx) => {
+      const tags = await tx
+        .insert(tagsTable)
+        .values(toAdd.map(({ name, category }) => ({ name, category })))
+        .onConflictDoUpdate({
+          target: tagsTable.name,
+          set: { category: sql`COALESCE(${tagsTable.category}, excluded.category)` },
+        })
+        .returning({ id: tagsTable.id })
+
       const inserts = await tx
         .insert(tagsToImagesTable)
         .values(
-          ids.map(({ id: tagId }) => ({
+          tags.map(({ id: tagId }) => ({
             tagId,
             imageId: id,
           })),
@@ -91,7 +123,7 @@ export class TagsService {
           eq(tagsTable.category, options.category) :
           undefined,
       ))
-      .orderBy(asc(tagsTable.id))
+      .orderBy(desc(tagsTable.usageCount))
       .limit(options.limit ?? 50)
   }
 

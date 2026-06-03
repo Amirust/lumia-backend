@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
   Session,
   Sse,
@@ -23,9 +24,11 @@ import { ErrorCode } from '@app/types/error-code.enum'
 import { ImageSourceType } from '@app/types/image.source-type.enum'
 import PatchTagsDto from './dto/patch-tags.dto'
 import UpdateImageDto from './dto/update-image.dto'
+import SetFavoriteDto from './dto/set-favorite.dto'
 import ImageResponseDto from './dto/image.response.dto'
 import UploadResponseDto from './dto/upload.response.dto'
 import DeleteImageResponseDto from './dto/delete-image.response.dto'
+import SetFavoriteResponseDto from './dto/set-favorite.response.dto'
 import { isValidImage } from '@app/utils/is-image-valid'
 
 @ApiTags('images')
@@ -46,17 +49,35 @@ export class ImagesController {
 
     const buffers: ArrayBuffer[] = []
     let sourceType: ImageSourceType = ImageSourceType.FanArt
+
+    const timestamps = new Map<number, number>()
+
     let episodeId: string | undefined
-    let timestampSeconds: number | undefined
 
     for await (const part of req.parts()) {
       if (part.type === 'file') {
         const buf = await part.toBuffer()
         buffers.push(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer)
-      } else {
-        if (part.fieldname === 'sourceType') sourceType = part.value as ImageSourceType
-        if (part.fieldname === 'episodeId') episodeId = part.value as string
-        if (part.fieldname === 'timestampSeconds') timestampSeconds = Number(part.value)
+        continue
+      }
+
+      if (part.fieldname === 'sourceType') {
+        sourceType = part.value as ImageSourceType
+        continue
+      }
+
+      if (part.fieldname === 'episodeId') {
+        episodeId = part.value as string
+        continue
+      }
+
+      const separatorIndex = part.fieldname.lastIndexOf('-')
+      const field = separatorIndex === -1 ? part.fieldname : part.fieldname.slice(0, separatorIndex)
+      const index = separatorIndex === -1 ? NaN : parseInt(part.fieldname.slice(separatorIndex + 1))
+
+      if (field === 'timestampSeconds') {
+        const seconds = parseInt(part.value as string)
+        timestamps.set(index, seconds)
       }
     }
 
@@ -64,9 +85,12 @@ export class ImagesController {
       throw new BadRequestException({ code: ErrorCode.NoFilesUploaded })
 
     const files = buffers
-      .map((buffer) => ({
+      .map((buffer, index) => ({
         buffer,
-        options: { episodeId, timestampSeconds },
+        options: {
+          episodeId: episodeId,
+          timestampSeconds: timestamps.get(index),
+        },
       }))
 
     const isSomeCorrupted = await Promise.all(files.map(async ({ buffer }) => !(await isValidImage(Buffer.from(buffer, 0, buffer.byteLength)))))
@@ -90,8 +114,11 @@ export class ImagesController {
   @ApiParam({ name: 'id' })
   @ApiOkResponseWrapped(ImageResponseDto)
   @ApiErrorResponse(404, 'Image not found')
-  async getImage(@Param('id') id: string) {
-    const image = await this.imagesService.findOne(id)
+  async getImage(
+    @Param('id') id: string,
+    @Session() session: UserSession
+  ) {
+    const image = await this.imagesService.findOne(id, session.user.id)
 
     if (!image)
       throw new NotFoundException({ code: ErrorCode.ImageNotFound })
@@ -123,6 +150,19 @@ export class ImagesController {
     @Session() session: UserSession,
   ) {
     return this.imagesService.updateImage(id, session.user.id, dto)
+  }
+
+  @Put(':id/favorite')
+  @ApiOperation({ summary: 'Add or remove an image from the current user favorites' })
+  @ApiParam({ name: 'id' })
+  @ApiOkResponseWrapped(SetFavoriteResponseDto)
+  @ApiErrorResponse(404, 'Image not found')
+  async setFavorite(
+    @Param('id') id: string,
+    @Body() dto: SetFavoriteDto,
+    @Session() session: UserSession,
+  ) {
+    return this.imagesService.setFavorite(id, session.user.id, dto.isFavorite)
   }
 
   @Delete(':id')

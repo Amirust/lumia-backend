@@ -18,4 +18,8 @@ export enum ErrorCode {
   NoFilesUploaded,
   NotMultipart,
   CorruptedImage,
+
+  TagNotFound = 4001,
+
+  CharacterNotFound = 5001,
 }

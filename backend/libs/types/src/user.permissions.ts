@@ -9,6 +9,9 @@ export enum UserPermission {
 
   ManageAnime = 1 << 4,
 
+  ManageTags = 1 << 5,
+  ManageCharacters = 1 << 6,
+
   Administrator = 1 << 30,
 }
 

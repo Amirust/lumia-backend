@@ -10,6 +10,7 @@ const character = z.object({
 
 const characterWithTag = character.extend({
   tag: z.string().nullable(),
+  imagesCount: z.number().int(),
 })
 
 export default class CharacterResponseDto extends createZodDto(character) {}
