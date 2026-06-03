@@ -1,17 +1,16 @@
 import { Module } from '@nestjs/common'
-import { AppController } from './app.controller'
-import { AppService } from './app.service'
 import { ResponseModule } from '@app/response'
 import { ConfigModule, ConfigService } from '@nestjs/config'
-import { DB_CONNECTION, DbModule } from '@app/db'
+import { DB_CONNECTION, DbModule, DrizzleDB } from '@app/db'
 import { AuthGuard, AuthModule } from '@thallesp/nestjs-better-auth'
-import { NodePgDatabase } from 'drizzle-orm/node-postgres'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { APP_GUARD, APP_PIPE } from '@nestjs/core'
 import { ZodValidationPipe } from 'nestjs-zod'
 import { getBasicConfig } from '@app/better-auth'
+import { createAccessControlConfig } from '@app/better-auth/access-control'
 import { snowflake } from '@app/utils/snowflake'
+import { createAuthAccessHooks } from './common/auth-access.hooks'
 import { ImagesModule } from './images/images.module'
 import { UsersModule } from './users/users.module'
 import { GalleryModule } from './gallery/gallery.module'
@@ -32,9 +31,18 @@ import { PermissionGuard } from './common/permission.guard'
     AuthModule.forRootAsync({
       imports: [ DbModule ],
       inject: [ ConfigService, DB_CONNECTION ],
-      useFactory: (config: ConfigService, db: NodePgDatabase)=> ({
+      useFactory: (config: ConfigService, db: DrizzleDB)=> ({
         auth: betterAuth({
           ...getBasicConfig(),
+          databaseHooks: createAuthAccessHooks({
+            db,
+            config: createAccessControlConfig({
+              APP_WHITELIST_ON: config.get('APP_WHITELIST_ON'),
+              APP_WHITELIST: config.get('APP_WHITELIST'),
+              APP_BLACKLIST_ON: config.get('APP_BLACKLIST_ON'),
+              APP_BLACKLIST: config.get('APP_BLACKLIST'),
+            }),
+          }),
           trustedOrigins: [ config.getOrThrow('FRONTEND_ORIGIN'), 'http://localhost:3000' ],
           baseURL: config.getOrThrow('BACKEND_URL'),
           socialProviders: {
@@ -74,11 +82,7 @@ import { PermissionGuard } from './common/permission.guard'
     CharactersModule,
     TagsModule,
   ],
-  controllers: [
-    AppController,
-  ],
   providers: [
-    AppService,
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
