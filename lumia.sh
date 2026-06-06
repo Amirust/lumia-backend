@@ -33,11 +33,18 @@ compose_up() {
     docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d --build
 }
 
+run_migrations() {
+    echo "Running database migrations"
+    npm --prefix "$SCRIPT_DIR/backend" install
+    npm --prefix "$SCRIPT_DIR/backend" run migrate:migrate
+}
+
 install() {
     install_docker
     add_docker_sudoers
     download_models
     compose_up
+    run_migrations
     echo "Installation complete"
 }
 
