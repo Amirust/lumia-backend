@@ -12,6 +12,8 @@ const PROFILE: &str = "BALANCED";
 const FALLBACK_THRESHOLD: f32 = 0.5;
 const INTRA_THREADS: usize = 4;
 
+const CATEGORY_THRESHOLD_OVERRIDES: &[(&str, f32)] = &[("character", 0.85)];
+
 pub struct Labels {
     idx_to_tag: Vec<String>,
     tag_to_category: HashMap<String, String>,
@@ -158,6 +160,10 @@ fn load_thresholds(
         } else {
             per_category.insert(cat, th);
         }
+    }
+
+    for &(cat, th) in CATEGORY_THRESHOLD_OVERRIDES {
+        per_category.insert(cat.to_string(), th);
     }
 
     Ok(Thresholds { per_category, overall })
