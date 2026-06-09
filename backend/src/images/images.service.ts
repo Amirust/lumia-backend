@@ -376,6 +376,10 @@ export class ImagesService {
       excludeTagsIds.push(...new Set(resolvedExcludeTags.map(({ id }) => id)))
     }
 
+    const keysetCondition = lastSeenId
+      ? await this.resolveKeysetCondition(lastSeenId, options)
+      : undefined
+
     const result = await this.db
       .select({
         id: imagesTable.id,
@@ -388,11 +392,7 @@ export class ImagesService {
       .from(imagesTable)
       .where(
         and(
-          lastSeenId
-            ? options.sortDirection === ImageSortDirection.Ascending
-              ? sql`${imagesTable.id}::bigint > ${lastSeenId}::bigint`
-              : sql`${imagesTable.id}::bigint < ${lastSeenId}::bigint`
-            : undefined,
+          keysetCondition,
 
           // tags here
           tagsIds.length
@@ -492,32 +492,91 @@ export class ImagesService {
     }
   }
 
+  private async resolveKeysetCondition(lastSeenId: string, options: FindManyOptions) {
+    const ascending = options.sortDirection === ImageSortDirection.Ascending
+
+    const idCursor = ascending
+      ? sql`${imagesTable.id}::bigint > ${lastSeenId}::bigint`
+      : sql`${imagesTable.id}::bigint < ${lastSeenId}::bigint`
+
+    if (options.sortType !== ImageSortType.TimestampSeconds)
+      return idCursor
+
+    const [ anchor ] = await this.db
+      .select({ timestampSeconds: imagesTable.timestampSeconds })
+      .from(imagesTable)
+      .where(eq(imagesTable.id, lastSeenId))
+      .limit(1)
+
+    if (!anchor) return idCursor
+
+    if (anchor.timestampSeconds === null)
+      return sql`(${imagesTable.timestampSeconds} IS NULL AND ${idCursor})`
+
+    const anchorTs = anchor.timestampSeconds
+    const beyond = ascending
+      ? sql`${imagesTable.timestampSeconds} > ${anchorTs}`
+      : sql`${imagesTable.timestampSeconds} < ${anchorTs}`
+
+    return sql`(${beyond} OR (${imagesTable.timestampSeconds} = ${anchorTs} AND ${idCursor}) OR ${imagesTable.timestampSeconds} IS NULL)`
+  }
+
   private resolveFindManyDbSortFunction(
     sortType: FindManyOptions['sortType'] = ImageSortType.CreatedAt,
     sortDirection: FindManyOptions['sortDirection'] = ImageSortDirection.Descending,
   ) {
-    const field = sortType === ImageSortType.TimestampSeconds ? imagesTable.timestampSeconds : imagesTable.createdAt
+    // timestampSeconds is nullable and uncorrelated with the id, so we pin nulls to the
+    // end and add an id tiebreaker to make the composite keyset ordering deterministic.
+    if (sortType === ImageSortType.TimestampSeconds)
+      return sortDirection === ImageSortDirection.Ascending
+        ? sql`${imagesTable.timestampSeconds} asc nulls last, ${imagesTable.id}::bigint asc`
+        : sql`${imagesTable.timestampSeconds} desc nulls last, ${imagesTable.id}::bigint desc`
 
     return sortDirection === ImageSortDirection.Ascending ?
-      asc(field) :
-      desc(field)
+      asc(imagesTable.createdAt) :
+      desc(imagesTable.createdAt)
   }
 
   private resolveFindManySortFunction(
     sortType: FindManyOptions['sortType'] = ImageSortType.CreatedAt,
     sortDirection: FindManyOptions['sortDirection'] = ImageSortDirection.Descending,
   ) {
+    const ascending = sortDirection === ImageSortDirection.Ascending
+
+    // Mirror the DB ordering: (timestampSeconds NULLS LAST, id) so the in-memory re-sort
+    // after resolveImages keeps the same order the keyset cursor advanced through.
+    if (sortType === ImageSortType.TimestampSeconds)
+      return (a: ImageResponse, b: ImageResponse) => {
+        const aTs = a.timestampSeconds ?? null
+        const bTs = b.timestampSeconds ?? null
+
+        if (aTs === null && bTs === null) return this.compareIdBigint(a.id, b.id, ascending)
+        if (aTs === null) return 1
+        if (bTs === null) return -1
+
+        if (aTs !== bTs) return ascending ? aTs - bTs : bTs - aTs
+
+        return this.compareIdBigint(a.id, b.id, ascending)
+      }
+
     return (a: ImageResponse, b: ImageResponse) => {
-      const aValue = sortType === ImageSortType.TimestampSeconds ? a.timestampSeconds ?? 0 : new Date(a.createdAt).getTime()
-      const bValue = sortType === ImageSortType.TimestampSeconds ? b.timestampSeconds ?? 0 : new Date(b.createdAt).getTime()
+      const aValue = new Date(a.createdAt).getTime()
+      const bValue = new Date(b.createdAt).getTime()
 
       if (aValue === bValue) return 0
 
-      if (sortDirection === ImageSortDirection.Ascending)
-        return aValue < bValue ? -1 : 1
-      else
-        return aValue > bValue ? -1 : 1
+      return ascending ?
+        (aValue < bValue ? -1 : 1) :
+        (aValue > bValue ? -1 : 1)
     }
+  }
+
+  private compareIdBigint(a: string, b: string, ascending: boolean) {
+    if (a === b) return 0
+
+    const result = BigInt(a) < BigInt(b) ? -1 : 1
+
+    return ascending ? result : -result
   }
 
   private async resolveImages(imagesIds: string[], userId?: string, onlyFavorites: boolean = false) {
