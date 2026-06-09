@@ -4,6 +4,7 @@ import { ApiErrorResponse, ApiOkResponseWrapped } from '@app/response'
 import { UserPermission } from '@app/types/user.permissions'
 import { ErrorCode } from '@app/types/error-code.enum'
 import { RequirePermission } from '../common/require-permission.decorator'
+import { ThrottleAdminMutation, ThrottleSearch } from '../common/throttle/throttle.decorators'
 import { TagsService } from './tags.service'
 import ListTagsDto from './dto/list-tags.dto'
 import AutocompleteTagsDto from './dto/autocomplete-tags.dto'
@@ -19,6 +20,7 @@ export class TagsController {
   ) {}
 
   @Get()
+  @ThrottleSearch()
   @ApiOperation({ summary: 'Full tag list for settings (substring search, keyset pagination)' })
   @ApiOkResponseWrapped(TagResponseDto, { isArray: true })
   async list(@Query() query: ListTagsDto) {
@@ -26,6 +28,7 @@ export class TagsController {
   }
 
   @Get('autocomplete')
+  @ThrottleSearch()
   @ApiOperation({ summary: 'Tag suggestions for input (prefix match, ranked by usage)' })
   @ApiOkResponseWrapped(AutocompleteTagResponseDto, { isArray: true })
   async autocomplete(@Query() query: AutocompleteTagsDto) {
@@ -33,6 +36,7 @@ export class TagsController {
   }
 
   @Patch(':id')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageTags)
   @ApiOperation({ summary: 'Update tag (rename, recategorize, color override)' })
   @ApiParam({ name: 'id', description: 'tag id' })

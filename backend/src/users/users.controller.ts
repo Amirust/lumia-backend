@@ -7,6 +7,7 @@ import { UserPermission } from '@app/types/user.permissions'
 import UserResponseDto from './dto/user.response.dto'
 import ListUsersDto from './dto/list-users.dto'
 import UpdatePermissionsDto from './dto/update-permissions.dto'
+import { ThrottleAdminMutation, ThrottleSearch } from '../common/throttle/throttle.decorators'
 
 @ApiTags('users')
 @Controller('users')
@@ -16,6 +17,7 @@ export class UsersController {
   ) {}
 
   @Get()
+  @ThrottleSearch()
   @ApiOperation({ summary: 'List users (admin only, substring search, keyset pagination)' })
   @ApiOkResponseWrapped(UserResponseDto, { isArray: true })
   async getAllUsers(
@@ -46,6 +48,7 @@ export class UsersController {
   }
 
   @Patch(':id/permissions')
+  @ThrottleAdminMutation()
   @ApiOperation({ summary: 'Update a user permissions bitmask (admin only)' })
   @ApiParam({ name: 'id' })
   @ApiOkResponseWrapped(UserResponseDto)

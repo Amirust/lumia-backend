@@ -16,6 +16,11 @@ import {
 import { ApiErrorResponse, ApiOkResponseWrapped } from '@app/response'
 import { UserPermission } from '@app/types/user.permissions'
 import { RequirePermission } from '../common/require-permission.decorator'
+import {
+  ThrottleAdminMutation,
+  ThrottleImport,
+  ThrottleSearch,
+} from '../common/throttle/throttle.decorators'
 import { AnimeService } from './anime.service'
 import CreateSeriesDto from './dto/create-series.dto'
 import UpdateSeriesDto from './dto/update-series.dto'
@@ -41,6 +46,7 @@ export class AnimeController {
    */
 
   @Post('series')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Create series manually' })
   @ApiOkResponseWrapped(SeriesResponseDto)
@@ -49,6 +55,7 @@ export class AnimeController {
   }
 
   @Get('series')
+  @ThrottleSearch()
   @ApiOperation({ summary: 'List series with keyset pagination' })
   @ApiOkResponseWrapped(SeriesResponseDto, { isArray: true })
   async listSeries(@Query() query: ListSeriesDto) {
@@ -65,6 +72,7 @@ export class AnimeController {
   }
 
   @Patch('series/:id')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Update series' })
   @ApiParam({ name: 'id' })
@@ -75,6 +83,7 @@ export class AnimeController {
   }
 
   @Delete('series/:id')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Delete series (fails if seasons exist)' })
   @ApiParam({ name: 'id' })
@@ -85,6 +94,7 @@ export class AnimeController {
   }
 
   @Post('series/import')
+  @ThrottleImport()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Import a new series from a Shikimori URL' })
   @ApiErrorResponse(409, 'This shikimori anime is already imported')
@@ -97,6 +107,7 @@ export class AnimeController {
    */
 
   @Post('series/:id/seasons')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Create season under a series' })
   @ApiParam({ name: 'id', description: 'series id' })
@@ -116,6 +127,7 @@ export class AnimeController {
   }
 
   @Post('series/:id/seasons/import')
+  @ThrottleImport()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Import an additional season into an existing series from Shikimori' })
   @ApiParam({ name: 'id', description: 'series id' })
@@ -135,6 +147,7 @@ export class AnimeController {
   }
 
   @Patch('seasons/:id')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Update season' })
   @ApiParam({ name: 'id' })
@@ -145,6 +158,7 @@ export class AnimeController {
   }
 
   @Delete('seasons/:id')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Delete season (fails if episodes exist)' })
   @ApiParam({ name: 'id' })
@@ -159,6 +173,7 @@ export class AnimeController {
    */
 
   @Post('seasons/:id/episodes')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Create episode under a season' })
   @ApiParam({ name: 'id', description: 'season id' })
@@ -187,6 +202,7 @@ export class AnimeController {
   }
 
   @Patch('episodes/:id')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Update episode' })
   @ApiParam({ name: 'id' })
@@ -197,6 +213,7 @@ export class AnimeController {
   }
 
   @Delete('episodes/:id')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageAnime)
   @ApiOperation({ summary: 'Delete episode' })
   @ApiParam({ name: 'id' })

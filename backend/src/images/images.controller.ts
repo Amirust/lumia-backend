@@ -32,6 +32,13 @@ import UploadResponseDto from './dto/upload.response.dto'
 import DeleteImageResponseDto from './dto/delete-image.response.dto'
 import SetFavoriteResponseDto from './dto/set-favorite.response.dto'
 import { isValidImage } from '@app/utils/is-image-valid'
+import {
+  ThrottleFavorite,
+  ThrottleMutation,
+  ThrottlePublic,
+  ThrottleStream,
+  ThrottleUpload,
+} from '../common/throttle/throttle.decorators'
 
 @ApiTags('images')
 @Controller('images')
@@ -42,6 +49,7 @@ export class ImagesController {
   ) {}
 
   @Post('upload')
+  @ThrottleUpload()
   @ApiOperation({ summary: 'Upload one or more images (multipart, max 10 files)' })
   @ApiConsumes('multipart/form-data')
   @ApiOkResponseWrapped(UploadResponseDto)
@@ -129,6 +137,7 @@ export class ImagesController {
   }
 
   @Get(':id/og')
+  @ThrottlePublic()
   @AllowAnonymous()
   @ApiOperation({ summary: 'Public Open Graph metadata for an image link preview' })
   @ApiParam({ name: 'id' })
@@ -159,6 +168,7 @@ export class ImagesController {
   }
 
   @Patch(':id/tags')
+  @ThrottleMutation()
   @ApiOperation({ summary: 'Add / remove / replace tags of an image' })
   @ApiParam({ name: 'id' })
   @ApiOkResponseWrapped(ImageResponseDto)
@@ -172,6 +182,7 @@ export class ImagesController {
   }
 
   @Patch(':id')
+  @ThrottleMutation()
   @ApiOperation({ summary: 'Update image source type / episode link' })
   @ApiParam({ name: 'id' })
   @ApiOkResponseWrapped(ImageResponseDto)
@@ -185,6 +196,7 @@ export class ImagesController {
   }
 
   @Put(':id/favorite')
+  @ThrottleFavorite()
   @ApiOperation({ summary: 'Add or remove an image from the current user favorites' })
   @ApiParam({ name: 'id' })
   @ApiOkResponseWrapped(SetFavoriteResponseDto)
@@ -198,6 +210,7 @@ export class ImagesController {
   }
 
   @Delete(':id')
+  @ThrottleMutation()
   @ApiOperation({ summary: 'Delete an image (owner, or DeleteOthersImages permission)' })
   @ApiParam({ name: 'id' })
   @ApiOkResponseWrapped(DeleteImageResponseDto)
@@ -210,6 +223,7 @@ export class ImagesController {
   }
 
   @Sse(':imageId/events')
+  @ThrottleStream()
   streamImageEvents(@Param('imageId') imageId: string) {
     return this.events.asObservable(imageId).pipe(
       map(event => {

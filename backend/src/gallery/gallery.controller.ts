@@ -6,6 +6,7 @@ import ListImagesDto from './dto/list-images.dto'
 import ListImagesResponseDto from './dto/list-images.response.dto'
 import GetTotalImagesCountResponseDto from './dto/total-images-count.response.dto'
 import type { UserSession } from '@thallesp/nestjs-better-auth'
+import { ThrottleSearch } from '../common/throttle/throttle.decorators'
 
 @ApiTags('gallery')
 @Controller('gallery')
@@ -15,6 +16,7 @@ export class GalleryController {
   ) {}
 
   @Get()
+  @ThrottleSearch()
   @ApiOperation({ summary: 'Search/list images with filters (keyset pagination)' })
   @ApiOkResponseWrapped(ListImagesResponseDto)
   async list(

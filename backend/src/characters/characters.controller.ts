@@ -4,6 +4,7 @@ import { ApiErrorResponse, ApiOkResponseWrapped } from '@app/response'
 import { UserPermission } from '@app/types/user.permissions'
 import { ErrorCode } from '@app/types/error-code.enum'
 import { RequirePermission } from '../common/require-permission.decorator'
+import { ThrottleAdminMutation, ThrottleSearch } from '../common/throttle/throttle.decorators'
 import { CharactersService } from './characters.service'
 import SearchCharacterDto from './dto/search-character.dto'
 import UpdateCharacterDto from './dto/update-character.dto'
@@ -17,6 +18,7 @@ export class CharactersController {
   ) {}
 
   @Get()
+  @ThrottleSearch()
   @ApiOperation({ summary: 'List characters' })
   @ApiOkResponseWrapped(CharacterWithTagResponseDto, { isArray: true })
   async getCharacters(
@@ -54,6 +56,7 @@ export class CharactersController {
   }
 
   @Patch(':id')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageCharacters)
   @ApiOperation({ summary: 'Update character (rename, set cover image)' })
   @ApiParam({ name: 'id' })
@@ -72,6 +75,7 @@ export class CharactersController {
   }
 
   @Delete(':id')
+  @ThrottleAdminMutation()
   @RequirePermission(UserPermission.ManageCharacters)
   @ApiOperation({ summary: 'Delete character' })
   @ApiParam({ name: 'id' })

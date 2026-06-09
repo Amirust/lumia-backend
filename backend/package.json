@@ -32,6 +32,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-fastify": "^11.1.18",
     "@nestjs/swagger": "^11.2.7",
+    "@nestjs/throttler": "^6.5.0",
     "@openrouter/ai-sdk-provider": "^2.8.0",
     "@scalar/fastify-api-reference": "^1.57.5",
     "@scalar/nestjs-api-reference": "^1.1.19",

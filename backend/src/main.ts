@@ -25,6 +25,12 @@ async function bootstrap() {
     origin: [ config.getOrThrow('FRONTEND_ORIGIN'), 'http://localhost:3000' ],
     methods: [ 'GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS' ],
     allowedHeaders: [ 'Content-Type', 'Authorization' ],
+    exposedHeaders: [
+      'Retry-After',
+      'X-RateLimit-Limit',
+      'X-RateLimit-Remaining',
+      'X-RateLimit-Reset',
+    ],
     credentials: true,
   })
 

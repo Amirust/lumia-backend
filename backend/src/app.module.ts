@@ -6,6 +6,7 @@ import { AuthGuard, AuthModule } from '@thallesp/nestjs-better-auth'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { APP_GUARD, APP_PIPE } from '@nestjs/core'
+import { ThrottlerModule } from '@nestjs/throttler'
 import { ZodValidationPipe } from 'nestjs-zod'
 import { getBasicConfig } from '@app/better-auth'
 import { createAccessControlConfig } from '@app/better-auth/access-control'
@@ -19,11 +20,22 @@ import { CharactersModule } from './characters/characters.module'
 import { TagsService } from './tags/tags.service'
 import { TagsModule } from './tags/tags.module'
 import { PermissionGuard } from './common/permission.guard'
+import { UserThrottlerGuard } from './common/throttle/user-throttler.guard'
+import { ThrottleTier } from './common/throttle/throttle.constants'
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: 'default',
+          ttl: ThrottleTier.Default.ttl,
+          limit: ThrottleTier.Default.limit,
+        },
+      ],
     }),
     DbModule,
     ResponseModule,
@@ -86,6 +98,10 @@ import { PermissionGuard } from './common/permission.guard'
     {
       provide: APP_GUARD,
       useClass: AuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: UserThrottlerGuard,
     },
     {
       provide: APP_GUARD,
