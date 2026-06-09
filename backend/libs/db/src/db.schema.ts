@@ -158,6 +158,8 @@ export const tagsTable = pgTable('tags', {
   usageCount: integer('usage_count').default(0).notNull(),
 }, (t) => [
   unique('tags_name_unique').on(t.name),
+  index('tags_name_trgm_idx')
+    .using('gin', sql`${t.name} gin_trgm_ops`),
 ])
 
 export const tagsToImagesTable = pgTable('tags_to_images', {

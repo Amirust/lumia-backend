@@ -88,7 +88,7 @@ export class TagsService {
       .from(tagsTable)
       .where(and(
         options.q ?
-          sql`${tagsTable.name} ILIKE ${options.q + '%'}` :
+          sql`${tagsTable.name} ILIKE ${'%' + options.q + '%'}` :
           undefined,
 
         options.category ?
