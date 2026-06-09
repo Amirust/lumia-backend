@@ -10,13 +10,15 @@ import {
   Post,
   Put,
   Req,
+  Res,
   Session,
   Sse,
 } from '@nestjs/common'
 import { ApiConsumes, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 import { map } from 'rxjs'
-import { type FastifyRequest } from 'fastify'
-import { type UserSession } from '@thallesp/nestjs-better-auth'
+import { type FastifyRequest, type FastifyReply } from 'fastify'
+import { AllowAnonymous, type UserSession } from '@thallesp/nestjs-better-auth'
+import { ImageStatus } from '@app/types/image.status.enum'
 import { ApiErrorResponse, ApiOkResponseWrapped } from '@app/response'
 import { ImagesService } from './images.service'
 import { EventsService } from '@app/events'
@@ -124,6 +126,36 @@ export class ImagesController {
       throw new NotFoundException({ code: ErrorCode.ImageNotFound })
 
     return image
+  }
+
+  @Get(':id/og')
+  @AllowAnonymous()
+  @ApiOperation({ summary: 'Public Open Graph metadata for an image link preview' })
+  @ApiParam({ name: 'id' })
+  @ApiErrorResponse(404, 'Image not found')
+  async getImageOg(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const image = await this.imagesService.findOne(id)
+
+    if (!image || !image.storageKey || image.status !== ImageStatus.Done)
+      throw new NotFoundException({ code: ErrorCode.ImageNotFound })
+
+    // Metadata is immutable once the image is processed, so let Cloudflare hold it
+    reply.header('Cache-Control', 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800')
+
+    const title = image.series?.titleRus ?? image.series?.titleEng ?? null
+
+    return {
+      id: image.id,
+      storageKey: image.storageKey,
+      width: image.width,
+      height: image.height,
+      title,
+      episode: image.episode ? { number: image.episode.number, title: image.episode.title } : null,
+      season: image.season ? { number: image.season.number } : null,
+    }
   }
 
   @Patch(':id/tags')
