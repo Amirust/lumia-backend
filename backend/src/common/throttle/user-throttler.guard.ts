@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { ExecutionContext, Injectable } from '@nestjs/common'
 import { ThrottlerGuard } from '@nestjs/throttler'
+import { isAdminContext } from './throttle.constants'
 
 interface RequestWithSession {
   session?: { user?: { id?: string } }
@@ -17,5 +18,12 @@ export class UserThrottlerGuard extends ThrottlerGuard {
     const userId = req.session?.user?.id
 
     return Promise.resolve(userId ?? req.ip ?? 'unknown')
+  }
+
+  /*
+   * Administrators are exempt from every rate limit.
+   */
+  protected shouldSkip(context: ExecutionContext): Promise<boolean> {
+    return Promise.resolve(isAdminContext(context))
   }
 }

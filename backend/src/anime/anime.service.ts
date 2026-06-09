@@ -254,14 +254,12 @@ export class AnimeService {
     const [ episode ] = await this.db
       .select({
         ...getTableColumns(episodesTable),
-        imagesCount: sql<number>`COUNT(${screenshotsTable.id})`.mapWith(Number),
+        imagesCount: this.getImagesCountQuery(),
         imageId: randomScreenshot.imageId
       })
       .from(episodesTable)
       .where(eq(episodesTable.id, id))
-      .leftJoin(screenshotsTable, eq(screenshotsTable.episodeId, episodesTable.id))
       .leftJoinLateral(randomScreenshot, sql`true`)
-      .groupBy(episodesTable.id, randomScreenshot.imageId)
 
     if (!episode)
       throw new NotFoundException({ code: ErrorCode.EpisodeNotFound })
@@ -277,14 +275,12 @@ export class AnimeService {
     return this.db
       .select({
         ...getTableColumns(episodesTable),
-        imagesCount: sql<number>`COUNT(${screenshotsTable.id})`.mapWith(Number),
+        imagesCount: this.getImagesCountQuery(),
         imageId: randomScreenshot.imageId,
       })
       .from(episodesTable)
       .where(eq(episodesTable.seasonId, seasonId))
-      .leftJoin(screenshotsTable, eq(screenshotsTable.episodeId, episodesTable.id))
       .leftJoinLateral(randomScreenshot, sql`true`)
-      .groupBy(episodesTable.id, randomScreenshot.imageId)
       .orderBy(asc(episodesTable.number))
   }
 
@@ -555,6 +551,14 @@ export class AnimeService {
 
     const created = await this.ensureEpisodes(season.id, this.getEpisodeCount(data))
     this.logger.log(`Refreshed season ${season.id} from Shikimori (${created} new episodes)`)
+  }
+
+  private getImagesCountQuery() {
+    return sql<number>`(
+      SELECT COUNT(*)
+      FROM ${screenshotsTable}
+      WHERE ${screenshotsTable.episodeId} = ${episodesTable.id}
+    )`.mapWith(Number)
   }
 
   private getRandomScreenshotIdQuery() {

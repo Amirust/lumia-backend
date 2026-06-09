@@ -18,17 +18,9 @@ export const ThrottleTier = {
   Import: { ttl: MINUTE, limit: 5 },
   Stream: { ttl: MINUTE, limit: 120 },
   Public: { ttl: MINUTE, limit: 60 },
-} as const
-
-/*
- * Upload is the most expensive endpoint (image processing + S3, up to 10
- * files per request). Admins get a looser ceiling instead of being exempt
- * entirely, so a runaway script can still not exhaust the instance.
- */
-export const UploadThrottle = {
-  ttl: MINUTE,
-  userLimit: 10,
-  adminLimit: 60,
+  // Upload is the most expensive endpoint (image processing + S3, up to 10
+  // files per request). Admins are exempt entirely via UserThrottlerGuard.
+  Upload: { ttl: MINUTE, limit: 10 },
 } as const
 
 interface RequestWithSession {
