@@ -388,8 +388,11 @@ export class ImagesService {
       .from(imagesTable)
       .where(
         and(
-          // Pagination
-          lastSeenId ? sql`${imagesTable.id}::bigint < ${lastSeenId}::bigint` : undefined,
+          lastSeenId
+            ? options.sortDirection === ImageSortDirection.Ascending
+              ? sql`${imagesTable.id}::bigint > ${lastSeenId}::bigint`
+              : sql`${imagesTable.id}::bigint < ${lastSeenId}::bigint`
+            : undefined,
 
           // tags here
           tagsIds.length
