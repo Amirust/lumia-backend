@@ -60,7 +60,6 @@ export class UsersService {
       })
       .from(user)
       .where(and(
-        options.lastSeenId ? sql`${user.id}::bigint > ${options.lastSeenId}::bigint` : undefined,
         options.searchString ? or(
           sql`${user.name} ILIKE ${options.searchString + '%'}`,
           sql`${user.username} ILIKE ${options.searchString + '%'}`,
@@ -72,7 +71,18 @@ export class UsersService {
       .leftJoin(imagesTable, eq(imagesTable.authorId, user.id))
       .leftJoin(account, eq(account.userId, user.id))
       .groupBy(user.id)
-      .orderBy(desc(sql`COUNT(${imagesTable.id})`))
+      .having(
+        options.lastSeenId
+          ? sql`(
+              COUNT(${imagesTable.id}) < (SELECT COUNT(*) FROM ${imagesTable} WHERE ${imagesTable.authorId} = ${options.lastSeenId})
+              OR (
+                COUNT(${imagesTable.id}) = (SELECT COUNT(*) FROM ${imagesTable} WHERE ${imagesTable.authorId} = ${options.lastSeenId})
+                AND ${user.id}::bigint > ${options.lastSeenId}::bigint
+              )
+            )`
+          : undefined,
+      )
+      .orderBy(desc(sql`COUNT(${imagesTable.id})`), sql`${user.id}::bigint ASC`)
       .limit(limit)
   }
 

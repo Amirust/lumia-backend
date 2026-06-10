@@ -525,16 +525,14 @@ export class ImagesService {
     sortType: FindManyOptions['sortType'] = ImageSortType.CreatedAt,
     sortDirection: FindManyOptions['sortDirection'] = ImageSortDirection.Descending,
   ) {
-    // timestampSeconds is nullable and uncorrelated with the id, so we pin nulls to the
-    // end and add an id tiebreaker to make the composite keyset ordering deterministic.
     if (sortType === ImageSortType.TimestampSeconds)
       return sortDirection === ImageSortDirection.Ascending
         ? sql`${imagesTable.timestampSeconds} asc nulls last, ${imagesTable.id}::bigint asc`
         : sql`${imagesTable.timestampSeconds} desc nulls last, ${imagesTable.id}::bigint desc`
 
-    return sortDirection === ImageSortDirection.Ascending ?
-      asc(imagesTable.createdAt) :
-      desc(imagesTable.createdAt)
+    return sortDirection === ImageSortDirection.Ascending
+      ? sql`${imagesTable.id}::bigint asc`
+      : sql`${imagesTable.id}::bigint desc`
   }
 
   private resolveFindManySortFunction(
@@ -543,8 +541,10 @@ export class ImagesService {
   ) {
     const ascending = sortDirection === ImageSortDirection.Ascending
 
-    // Mirror the DB ordering: (timestampSeconds NULLS LAST, id) so the in-memory re-sort
-    // after resolveImages keeps the same order the keyset cursor advanced through.
+    /*
+    Mirror the DB ordering: (timestampSeconds NULLS LAST, id) so the in-memory re-sort
+    after resolveImages keeps the same order the keyset cursor advanced through.
+     */
     if (sortType === ImageSortType.TimestampSeconds)
       return (a: ImageResponse, b: ImageResponse) => {
         const aTs = a.timestampSeconds ?? null

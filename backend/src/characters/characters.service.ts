@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { DB_CONNECTION, type DrizzleDB } from '@app/db'
 import { charactersTable, tagsTable, tagsToImagesTable } from '@app/db/db.schema'
-import { and, eq, getTableColumns, sql } from 'drizzle-orm'
+import { and, eq, getTableColumns, sql, type SQL } from 'drizzle-orm'
 import { snowflake } from '@app/utils/snowflake'
 import { TagsService } from '../tags/tags.service'
 
@@ -50,6 +50,8 @@ export class CharactersService {
   }
 
   async findMany(limit: number = 10, options: FindManyOptions) {
+    const isNameSearch = Boolean(options.name)
+
     return this.db
       .select({
         ...getTableColumns(charactersTable),
@@ -58,18 +60,49 @@ export class CharactersService {
       })
       .from(charactersTable)
       .where(and(
-        options.lastSeenId ?
-          sql`${charactersTable.id}::bigint > ${options.lastSeenId}::bigint` :
-          undefined,
-        options.name ?
-          sql`${charactersTable.displayName} % ${options.name}` :
-          undefined,
+        isNameSearch
+          ? sql`${charactersTable.displayName} % ${options.name}`
+          : undefined,
+        this.buildKeysetCondition(options, isNameSearch),
       ))
-      .orderBy(sql`similarity(${charactersTable.displayName}, ${options.name ?? ''}) DESC`)
+      .orderBy(...this.buildOrderBy(options, isNameSearch))
       .leftJoin(tagsTable, eq(tagsTable.id, charactersTable.tagId))
       .leftJoin(tagsToImagesTable, eq(tagsToImagesTable.tagId, charactersTable.tagId))
       .groupBy(charactersTable.id, tagsTable.name)
       .limit(limit)
+  }
+
+  private buildKeysetCondition(options: FindManyOptions, isNameSearch: boolean): SQL | undefined {
+    if (!options.lastSeenId) return undefined
+
+    if (!isNameSearch)
+      return sql`${charactersTable.id}::bigint > ${options.lastSeenId}::bigint`
+
+    const cursorSimilarity = sql`(
+      SELECT similarity(cursor_row.display_name, ${options.name})
+      FROM characters AS cursor_row
+      WHERE cursor_row.id = ${options.lastSeenId}
+    )`
+
+    const rowSimilarity = sql`similarity(${charactersTable.displayName}, ${options.name})`
+
+    return sql`(
+      ${rowSimilarity} < ${cursorSimilarity}
+      OR (
+        ${rowSimilarity} = ${cursorSimilarity}
+        AND ${charactersTable.id}::bigint > ${options.lastSeenId}::bigint
+      )
+    )`
+  }
+
+  private buildOrderBy(options: FindManyOptions, isNameSearch: boolean): SQL[] {
+    if (!isNameSearch)
+      return [ sql`${charactersTable.id}::bigint ASC` ]
+
+    return [
+      sql`similarity(${charactersTable.displayName}, ${options.name}) DESC`,
+      sql`${charactersTable.id}::bigint ASC`,
+    ]
   }
 
   async update(id: string, options: { name?: string; imageId?: string }) {
