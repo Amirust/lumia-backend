@@ -136,6 +136,23 @@ export class ImagesController {
     return image
   }
 
+  @Get('hash/:hash')
+  @ApiOperation({ summary: 'Get a single image by hash' })
+  @ApiParam({ name: 'hash' })
+  @ApiOkResponseWrapped(ImageResponseDto)
+  @ApiErrorResponse(404, 'Image not found')
+  async getImageByHash(
+    @Param('hash') hash: string,
+    @Session() session: UserSession
+  ) {
+    const image = await this.imagesService.findOneByHash(hash.toLowerCase(), session.user.id)
+
+    if (!image)
+      throw new NotFoundException({ code: ErrorCode.ImageNotFound })
+
+    return image
+  }
+
   @Get(':id/og')
   @ThrottlePublic()
   @AllowAnonymous()

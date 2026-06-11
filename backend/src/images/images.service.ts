@@ -16,8 +16,6 @@ import {
   and,
   arrayContains,
   arrayOverlaps,
-  asc,
-  desc,
   eq,
   exists,
   getTableColumns,
@@ -79,6 +77,18 @@ export class ImagesService {
     const data = await this.resolveImages([ id ], userId)
 
     return data.length ? data[0] : null
+  }
+
+  async findOneByHash(hash: string, userId?: string) {
+    const [ image ] = await this.db
+      .select({
+        id: imagesTable.id
+      })
+      .from(imagesTable)
+      .where(eq(imagesTable.contentHash, hash))
+
+    if (!image) return null
+    return this.findOne(image.id, userId)
   }
 
   async findMany(userId: string, limit: number = 50, lastSeenId?: string, options: FindManyOptions = {}) {
