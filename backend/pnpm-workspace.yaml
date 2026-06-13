@@ -1,6 +1,10 @@
-allowBuilds:
-  '@nestjs/core': set this to true or false
-  '@scarf/scarf': set this to true or false
-  esbuild: set this to true or false
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
+# Native deps (sharp, esbuild, unrs-resolver) ship prebuilt platform binaries via
+# optional dependencies, so their install/build scripts aren't required to run.
+# Don't fail the install when pnpm skips those unapproved build scripts.
+strictDepBuilds: false
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@scarf/scarf'
+  - esbuild
+  - sharp
+  - unrs-resolver
