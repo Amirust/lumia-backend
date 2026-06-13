@@ -13,10 +13,11 @@ interface GetAllUsersOptions {
 
 @Injectable()
 export class UsersService {
+  private readonly permissionsCache: Map<string, UserPermission> = new Map()
+
   constructor(
     @Inject(DB_CONNECTION)
     private readonly db: DrizzleDB,
-    private permissionsCache: Map<string, UserPermission>,
   ) {}
 
   async getUser(id: string, options: { includePermissions?: boolean } = {}) {
