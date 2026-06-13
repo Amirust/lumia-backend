@@ -29,6 +29,8 @@ import UpdateImageDto from './dto/update-image.dto'
 import SetFavoriteDto from './dto/set-favorite.dto'
 import ImageResponseDto from './dto/image.response.dto'
 import UploadResponseDto from './dto/upload.response.dto'
+import LinkByHashDto from './dto/link-by-hash.dto'
+import LinkByHashResponseDto from './dto/link-by-hash.response.dto'
 import DeleteImageResponseDto from './dto/delete-image.response.dto'
 import SetFavoriteResponseDto from './dto/set-favorite.response.dto'
 import { isValidImage } from '@app/utils/is-image-valid'
@@ -117,6 +119,21 @@ export class ImagesController {
         sourceFormat: image.sourceFormat,
       })),
     }
+  }
+
+  @Post('link-by-hash')
+  @ThrottleMutation()
+  @ApiOperation({ summary: 'Link existing images to an episode by their content hash (max 100)' })
+  @ApiOkResponseWrapped(LinkByHashResponseDto)
+  @ApiErrorResponse(403, 'Not enough permissions')
+  @ApiErrorResponse(404, 'Episode not found')
+  async linkByHash(
+    @Body() dto: LinkByHashDto,
+    @Session() session: UserSession,
+  ) {
+    const items = await this.imagesService.linkByHash(dto.hashes, dto.episodeId, session.user.id)
+
+    return { items }
   }
 
   @Get(':id')

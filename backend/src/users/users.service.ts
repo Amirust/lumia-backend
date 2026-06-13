@@ -16,6 +16,7 @@ export class UsersService {
   constructor(
     @Inject(DB_CONNECTION)
     private readonly db: DrizzleDB,
+    private permissionsCache: Map<string, UserPermission>,
   ) {}
 
   async getUser(id: string, options: { includePermissions?: boolean } = {}) {
@@ -97,19 +98,25 @@ export class UsersService {
       .where(eq(user.id, userId))
       .returning()
 
+    this.permissionsCache.set(userId, permissions)
+
     return updated
   }
 
   public async hasPermission(userId: string, permission: UserPermission) {
-    const [ data ] = await this.db
-      .select({
-        permissions: user.permissions,
-      })
-      .from(user)
-      .where(eq(user.id, userId))
+    let perms = this.permissionsCache.get(userId)
 
-    const permissions = data?.permissions || UserPermission.Zero
+    if (perms === undefined) {
+      const [ data ] = await this.db
+        .select({
+          permissions: user.permissions,
+        })
+        .from(user)
+        .where(eq(user.id, userId))
 
-    return bitmaskHas(permissions, permission) || bitmaskHas(permissions, UserPermission.Administrator)
+      perms = data?.permissions || UserPermission.Zero
+    }
+
+    return bitmaskHas(perms, permission) || bitmaskHas(perms, UserPermission.Administrator)
   }
 }

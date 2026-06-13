@@ -62,3 +62,9 @@ export interface ImageResponse extends ImageRecord {
   season?: SeasonRecord | null
   episode?: EpisodeRecord | null
 }
+
+export enum LinkByHashStatus {
+  Linked = 'linked',
+  ReLinked = 'relinked',
+  NotFound = 'not_found'
+}

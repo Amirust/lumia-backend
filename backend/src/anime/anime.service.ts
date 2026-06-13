@@ -267,6 +267,18 @@ export class AnimeService {
     return episode
   }
 
+  async ensureEpisodeExists(id: string): Promise<void> {
+    const exists = await this.db
+      .select({ id: episodesTable.id })
+      .from(episodesTable)
+      .where(eq(episodesTable.id, id))
+      .limit(1)
+      .then((rows) => rows.length > 0)
+
+    if (!exists)
+      throw new NotFoundException({ code: ErrorCode.EpisodeNotFound })
+  }
+
   async findEpisodesBySeason(seasonId: string): Promise<EpisodeRecordWithImagesCount[]> {
     await this.assertSeasonExists(seasonId)
 

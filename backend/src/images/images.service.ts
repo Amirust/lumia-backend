@@ -21,9 +21,10 @@ import {
   getTableColumns,
   getTableName,
   inArray,
+  ne,
   notExists,
   notInArray,
-  sql
+  sql,
 } from 'drizzle-orm'
 import { UsersService } from '../users/users.service'
 import { UserPermission } from '@app/types/user.permissions'
@@ -49,10 +50,12 @@ import {
   ImageResponse,
   ImageSortDirection,
   ImageSortType,
+  LinkByHashStatus,
   PreparedUpload,
   TagWithColor,
-  UploadImageOptions
+  UploadImageOptions,
 } from './images.types'
+import { AnimeService } from '../anime/anime.service'
 
 @Injectable()
 export class ImagesService {
@@ -71,6 +74,7 @@ export class ImagesService {
     private readonly taskQueue: TaskQueueService,
     private readonly events: EventsService,
     private readonly tagsService: TagsService,
+    private readonly animeService: AnimeService,
   ) {}
 
   async findOne(id: string, userId?: string) {
@@ -210,6 +214,7 @@ export class ImagesService {
   ) {
     const image = await this.findOne(imageId, userId)
 
+    if (changes.episodeId) await this.animeService.ensureEpisodeExists(changes.episodeId)
     if (!image) throw new NotFoundException({ code: ErrorCode.ImageNotFound })
 
     if (
@@ -309,6 +314,80 @@ export class ImagesService {
         .where(and(eq(favoritesTable.userId, userId), eq(favoritesTable.imageId, imageId)))
 
     return { ok: true }
+  }
+
+  async linkByHash(hashes: string[], episodeId: string, userId: string) {
+    // Perms and episode check
+    if (!(await this.usersService.hasPermission(userId, UserPermission.AssignOthersEpisodeScreenshots)))
+      throw new ForbiddenException({ code: ErrorCode.NotEnoughPermissions })
+
+    await this.animeService.ensureEpisodeExists(episodeId)
+
+    // Code
+    const normalizedHashes = [ ...new Set(hashes.map((h) => h.trim().toLowerCase())) ]
+
+    const images = await this.db
+      .select({
+        id: imagesTable.id,
+        contentHash: imagesTable.contentHash,
+      })
+      .from(imagesTable)
+      .where(inArray(imagesTable.contentHash, normalizedHashes))
+
+    if (!images.length)
+      return normalizedHashes.map((hash) => ({ hash, status: LinkByHashStatus.NotFound, image: null }))
+
+    const foundHashToId = new Map(images.map((i) => [ i.contentHash, i.id ]))
+    const foundIdToHash = new Map(images.map((i) => [ i.id, i.contentHash ]))
+
+    const founded = normalizedHashes
+      .map((hash) => foundHashToId.get(hash))
+      .filter(Boolean) as string[]
+
+    const notFoundHashes = normalizedHashes.filter((hash) => !foundHashToId.has(hash))
+
+    const inserted = await this.db.transaction(async (tx) => {
+      await tx
+        .update(imagesTable)
+        .set({ sourceType: ImageSourceType.Screenshot })
+        .where(and(
+          inArray(imagesTable.id, founded),
+          ne(imagesTable.sourceType, ImageSourceType.Screenshot)
+        ))
+
+      return tx
+        .insert(screenshotsTable)
+        .values(
+          founded.map((imageId) => ({
+            id: snowflake(), imageId, episodeId,
+          }))
+        )
+        .onConflictDoUpdate({ target: screenshotsTable.imageId, set: { episodeId } })
+        .returning({
+          imageId: screenshotsTable.imageId,
+          episodeId: screenshotsTable.episodeId,
+          inserted: sql<boolean>`(xmax = 0)`
+        })
+    })
+
+    // invalidate cache for linked images
+    inserted.map((i) => this.lruCacheImages.delete(i.imageId))
+
+    const resolvedImages = await this.resolveImages(inserted.map((i) => i.imageId), userId)
+
+    return [
+      ...inserted
+        .map((i) => ({
+          hash: foundIdToHash.get(i.imageId)!,
+          status: i.inserted ? LinkByHashStatus.Linked : LinkByHashStatus.ReLinked,
+          image: resolvedImages.find((img) => img.id === i.imageId)!,
+        })),
+      ...notFoundHashes.map((hash) => ({
+        hash,
+        status: LinkByHashStatus.NotFound,
+        image: null
+      }))
+    ]
   }
 
   /*

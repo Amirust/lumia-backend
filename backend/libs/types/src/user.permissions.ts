@@ -15,4 +15,4 @@ export enum UserPermission {
   Administrator = 1 << 30,
 }
 
-export const DefaultUserPermissions = UserPermission.UploadImages
+export const DefaultUserPermissions = UserPermission.Zero
