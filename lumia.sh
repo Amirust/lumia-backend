@@ -33,10 +33,19 @@ compose_up() {
     docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d --build
 }
 
+ensure_pnpm() {
+    if command -v pnpm >/dev/null 2>&1; then
+        return
+    fi
+    echo "Enabling pnpm via corepack"
+    corepack enable pnpm
+}
+
 run_migrations() {
     echo "Running database migrations"
-    npm --prefix "$SCRIPT_DIR/backend" install
-    npm --prefix "$SCRIPT_DIR/backend" run migrate:migrate
+    ensure_pnpm
+    pnpm --dir "$SCRIPT_DIR/backend" install --frozen-lockfile
+    pnpm --dir "$SCRIPT_DIR/backend" run migrate:migrate
 }
 
 install() {
