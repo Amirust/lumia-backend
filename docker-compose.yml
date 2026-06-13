@@ -15,7 +15,7 @@ services:
       - ml
     build:
       dockerfile: Dockerfile
-      context: .
+      context: ./backend
     restart: unless-stopped
 
   ml:
