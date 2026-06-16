@@ -9,7 +9,8 @@ RUN mkdir src \
     && rm -rf src
 
 COPY src ./src
-RUN cargo build --release
+RUN find src -name '*.rs' -exec touch {} + \
+    && cargo build --release
 
 RUN mkdir -p /libs \
     && (find / -name 'libonnxruntime*.so*' -exec cp -v {} /libs/ \; 2>/dev/null || true) \
